@@ -16,7 +16,7 @@ check_distro(){
     case $distro in
         'ubuntu'|'fedora'|'arch') ;;
         *)
-            echo -e "== ${YELLOW}Distro '$distro' not supported, terminating script${RESET} =="
+            echo -e "\n== ${YELLOW}Distro '$distro' not supported, terminating script${RESET} =="
             exit 1
         ;;
     esac
@@ -36,11 +36,11 @@ initial_setup(){
 
 install_docker(){
     if docker &>/dev/null; then
-        echo -e "== ${YELLOW}Docker already installed on '$distro'${RESET} =="
+        echo -e "\n== ${YELLOW}Docker already installed on '$distro'${RESET} =="
         docker --version
         return 1
     else
-        echo -e "== ${YELLOW}Installing Docker on '$distro'${RESET} =="
+        echo -e "\n== ${YELLOW}Installing Docker on '$distro'${RESET} =="
     fi
 
     case $distro in
@@ -74,7 +74,7 @@ install_docker(){
         ;;
 
         'arch')
-            sudo pacman -Sy docker docker-buildx docker-compose
+            sudo pacman -Sy --noconfirm docker docker-buildx docker-compose
         ;;
 
         *) ;;
@@ -96,10 +96,12 @@ check_ports(){
 }
 
 disable_swap(){
-    if ! grep -q 'dev' /proc/swaps; then
+    if ! grep -q -e 'swap' -e 'dev' /proc/swaps; then
         return 1
+    else
+        echo -e "\n== ${YELLOW}Disabling SWAP on '$distro'${RESET} =="
     fi
-    
+
     case $distro in
         'ubuntu')
             sudo sed -i '/swap/s/^/# /' /etc/fstab &&
@@ -114,11 +116,11 @@ disable_swap(){
 
 install_kubernetes(){
     if kubectl &>/dev/null; then
-        echo -e "== ${YELLOW}Kubernetes already installed on '$distro'${RESET} =="
+        echo -e "\n== ${YELLOW}Kubernetes already installed on '$distro'${RESET} =="
         kubectl version
         return 1
     else
-        echo -e "== ${YELLOW}Installing Kubernetes on '$distro'${RESET} =="
+        echo -e "\n== ${YELLOW}Installing Kubernetes on '$distro'${RESET} =="
     fi
 
     case $distro in
@@ -167,25 +169,60 @@ install_kubernetes(){
 }
 
 setup_cluster(){
-    MOAR_FIXES
-    setup_control_plane
-    setup_nodes_plane
+
+    echo -e "\n== ${YELLOW}=====${RESET} =="
+
+    MoW=''
+    while [[ $MoW != 'y' && $MoW != 'n' && $MoW != 'q' ]]; do
+        read -p "Set up this HOST as the cluster's master node? [y/n] " MoW
+
+        case $MoW in
+            'y')
+                master_tweak_containerd
+                # setup_master_node
+            ;;
+            
+            'n')
+                setup_worker_node
+            ;;
+            
+            'q')
+                return 1
+            ;;
+
+            *) : ;;
+        esac
+    done
 }
 
-MOAR_FIXES(){
-    
-    # FEDORA
-    # sudo firewall-cmd --zone=public --add-port=6443/tcp --permanent
-    # sudo firewall-cmd --zone=public --add-port=10250/tcp --permanent
-    # sudo firewall-cmd --reload
+master_tweak_containerd(){
+    # Ubuntu only
+    if [[ $distro != 'ubuntu' ]]; then
+        return 1
+    else
+        echo -e "\n== ${YELLOW}Defining Cgroup for Containerd on '$distro'${RESET} =="
+    fi
 
-    # UBUNTU -- likely DON'T
-    # wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.10/cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
-    # sudo dpkg -i cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
-
+    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#configuring-a-cgroup-driver
+    if ! grep -q -e 'Cgroup' /etc/containerd/config.toml; then
+        sudo mv /etc/containerd/config.toml{,.bak}
+        {
+            echo '# Content of file /etc/containerd/config.toml -- https://stackoverflow.com/a/74695867'
+            echo 'version = 2'
+            echo '[plugins]'
+            echo '  [plugins."io.containerd.grpc.v1.cri"]'
+            echo '   [plugins."io.containerd.grpc.v1.cri".containerd]'
+            echo '      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]'
+            echo '        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]'
+            echo '          runtime_type = "io.containerd.runc.v2"'
+            echo '          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]'
+            echo '            SystemdCgroup = true'
+            echo 
+        } | sudo tee  /etc/containerd/config.toml
+        sudo systemctl restart containerd
+    fi
 }
 
-setup_control_plane(){
 
             # FIX [ERROR CRI] -- https://github.com/containerd/containerd/issues/8139; https://k21academy.com/docker-kubernetes/container-runtime-is-not-running/
             sudo mv /etc/containerd/config.toml{,.bak} && sudo systemctl restart containerd
@@ -238,6 +275,10 @@ setup_control_plane(){
 }
 
 
+setup_worker_node(){
+    :
+}
+
 
 # ==============================================================================
 
@@ -245,10 +286,16 @@ setup_control_plane(){
 check_distro
 install_docker              # ...
 
-# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 check_ports
 disable_swap
-install_kubernetes  # kubeadm + kubelet + kubectl
+install_kubernetes          # kubeadm + kubelet + kubectl
+
+setup_cluster
+
+
+
+
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
 # OJO: https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/configure-cgroup-driver/
 
 # setup_cluster --> arch chungo
@@ -267,3 +314,25 @@ install_kubernetes  # kubeadm + kubelet + kubectl
 # [plugins."io.containerd.grpc.v1.cri".containerd]
 #   endpoint = "unix:///var/run/containerd/containerd.sock"' | sudo tee -a /etc/containerd/config.toml
 
+
+# MOAR_FIXES(){
+    
+#     # FEDORA
+#     # sudo firewall-cmd --zone=public --add-port=6443/tcp --permanent
+#     # sudo firewall-cmd --zone=public --add-port=10250/tcp --permanent
+#     # sudo firewall-cmd --reload
+
+#     # UBUNTU -- likely DON'T
+#     # wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.10/cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
+#     # sudo dpkg -i cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
+#     :
+# }
+
+
+    # # CONTAINERD ~~~~> FIX [ERROR CRI] -- https://github.com/containerd/containerd/issues/8139; https://k21academy.com/docker-kubernetes/container-runtime-is-not-running/
+    # sudo mv /etc/containerd/config.toml{,.bak} && sudo systemctl restart containerd
+    # ... + Connection refused lol
+
+
+    # sudo kubeadm init --pod-network-cidr=10.0.0.0/16
+    # # W0308 12:55:11.692043    2769 checks.go:835] detected that the sandbox image "registry.k8s.io/pause:3.6" of the container runtime is inconsistent with that used by kubeadm. It is recommended that using "registry.k8s.io/pause:3.9" as the CRI sandbox image.
