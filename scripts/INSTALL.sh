@@ -179,7 +179,7 @@ setup_cluster(){
         case $MoW in
             'y')
                 master_tweak_containerd
-                # setup_master_node
+                setup_master_node
             ;;
             
             'n')
@@ -223,60 +223,45 @@ master_tweak_containerd(){
     fi
 }
 
+setup_master_node(){
+    # Ubuntu only
+    if [[ $distro != 'ubuntu' ]]; then
+        return 1
+    else
+        echo -e "\n== ${YELLOW}Setting up Kubeadm and Calico!!${RESET} =="
+    fi
 
-            # FIX [ERROR CRI] -- https://github.com/containerd/containerd/issues/8139; https://k21academy.com/docker-kubernetes/container-runtime-is-not-running/
-            sudo mv /etc/containerd/config.toml{,.bak} && sudo systemctl restart containerd
-
-
-
-    # Tener en cuenta la red local -- OJO con el TOKEN para los worker nodes
     sudo kubeadm init --pod-network-cidr=10.0.0.0/16
 
-
-# W0308 12:55:11.692043    2769 checks.go:835] detected that the sandbox image "registry.k8s.io/pause:3.6" of the container runtime is inconsistent with that used by kubeadm. It is recommended that using "registry.k8s.io/pause:3.9" as the CRI sandbox image.
-
-
-
-
-
-# https://stackoverflow.com/a/74695867
-
-
-
-
-
-
-
-
-
-
-
+    if [[ $? != 0 ]]; then
+        echo -e "== ${YELLOW}'kubeadm init' failed, terminating script${RESET} =="
+        exit 1
+    fi
+    
+    echo ""
+    token_saved=''
+    while [[ $token_saved != 'ok' ]]; do
+        read -p "Save the token to some file. Enter 'ok' to continue: " token_saved
+    done
 
     mkdir -p $HOME/.kube &&
-        sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config &&
-        sudo chown $(id -u):$(id -g) $HOME/.kube/config
-
-        # kubectl get nodes --> NotReady is good
-    
+    sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config &&
+    sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
     kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/tigera-operator.yaml
     wget https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/custom-resources.yaml &&
         sed -i 's/192.168.0.0/10.0.0.0/' custom-resources.yaml
-        kubectl create -f custom-resources.yaml
-    watch kubectl get pods -n calico-system     # FOCKING FREEZES
+        kubectl create -f custom-resources.yaml &&
+        rm custom-resources.yaml
 
-    # # FIX 'Connection to the server <ip>:6443 was refused - did you specify the right host or port?'
-    reboot
-
-    # FIX SandboxChanged
-    kubectl get all -n tigera-operator
-    kubectl describe pod/tigera-operator-*
-    
+    echo -e "\n== ${GREEN}Script finished!! ${YELLOW}Verify them pods are being created!${RESET}=="
+    sleep 3
+    watch kubectl get pods -n calico-system
 }
 
-
 setup_worker_node(){
-    :
+    # WIP
+    exit 1
 }
 
 
