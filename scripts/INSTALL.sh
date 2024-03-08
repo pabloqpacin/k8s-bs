@@ -170,7 +170,7 @@ install_kubernetes(){
 
 setup_cluster(){
 
-    echo -e "\n== ${YELLOW}=====${RESET} =="
+    echo -e "\n== ${YELLOW}====================${RESET} =="
 
     MoW=''
     while [[ $MoW != 'y' && $MoW != 'n' && $MoW != 'q' ]]; do
@@ -181,11 +181,11 @@ setup_cluster(){
                 master_tweak_containerd
                 setup_master_node
             ;;
-            
+
             'n')
                 setup_worker_node
             ;;
-            
+
             'q')
                 return 1
             ;;
@@ -231,13 +231,14 @@ setup_master_node(){
         echo -e "\n== ${YELLOW}Setting up Kubeadm and Calico!!${RESET} =="
     fi
 
+    # https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
     sudo kubeadm init --pod-network-cidr=10.0.0.0/16
 
     if [[ $? != 0 ]]; then
-        echo -e "== ${YELLOW}'kubeadm init' failed, terminating script${RESET} =="
+        echo -e "\n== ${YELLOW}'kubeadm init' failed, terminating script${RESET} =="
         exit 1
     fi
-    
+
     echo ""
     token_saved=''
     while [[ $token_saved != 'ok' ]]; do
@@ -254,9 +255,18 @@ setup_master_node(){
         kubectl create -f custom-resources.yaml &&
         rm custom-resources.yaml
 
-    echo -e "\n== ${GREEN}Script finished!! ${YELLOW}Verify them pods are being created!${RESET}=="
-    sleep 3
+    echo -e "\n== ${GREEN}Script finished!! ${YELLOW}Verify them pods are being created!${RESET} =="
+    echo '.....' && sleep 1
+    echo '....' && sleep 1
+    echo '...' && sleep 1
+    echo '..' && sleep 1
+    echo '.' && sleep 1
+
     watch kubectl get pods -n calico-system
+    wait $!
+    kubectl cluster-info &&
+    kubectl get nodes &&
+    kubectl get ns
 }
 
 setup_worker_node(){

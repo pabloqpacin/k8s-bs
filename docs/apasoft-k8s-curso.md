@@ -42,7 +42,7 @@
 
 </details>
 
-Destacan las secciones: <!--10,--> 12, 15,
+<!-- Destacan las secciones: 10, 12, 15, -->
 
 ## NOTAS
 
@@ -2798,6 +2798,8 @@ mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
   # ls -la $HOME/.kube/config -> 0600 permissions
+
+        # kubectl get nodes --> NotReady is good
 
 # # sudo systemctl restart kubelet    # ?
 

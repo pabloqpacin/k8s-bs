@@ -4,7 +4,9 @@
 
 > Virtualized VM Lab for K8S Cluster
 
-```md
+
+
+<!-- ```md
 > NETWORK
 - HOMELAN: 192.168.1.0/24
 - HOST OS:
@@ -17,4 +19,12 @@
         - 201-UbuntuServer 22.04 4 LTS x86_64
         - 202-FedoraServer 39 x86_64
         - 203-ArchLinux x86_64
-```
+``` -->
+
+
+---
+
+> [yutubi](https://www.youtube.com/watch?v=G5n0Z-OVup4)
+
+
+
