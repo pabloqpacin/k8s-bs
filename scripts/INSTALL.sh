@@ -1,34 +1,56 @@
 #!/usr/bin/env bash
 
+# ##################################################
+# Must be updated upon software releases.
+# Just guidance aight
+# ##################################################
+
+RESET='\e[0m'
+GREEN='\e[32m'
+YELLOW='\e[33m'
+
 check_distro(){
     distro=$(grep -s "^ID=" /etc/os-release | awk -F '=' '{print $2}')
+    case $distro in
+        'ubuntu'|'fedora'|'arch') ;;
+        *)
+            echo -e "== ${YELLOW}Distro '$distro' not supported, terminating script${RESET} =="
+            exit 1
+        ;;
+    esac
 }
 
-# docker(){
-#     case $distro in
-#         'debian') ;;
-#         'ubuntu') sh -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/dotfiles/main/scripts/autosetup/UbuntuServer-base.sh)" ;;
-#         'fedora') sh -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/dotfiles/main/scripts/autosetup/FedoraServer-base.sh)" ;;
-#         'arch') sudo pacman -Sy docker docker-buildx docker-compose ;;
-#         *) echo "time 2 troubleshoot" ;;
-#     esac
-# }
+initial_setup(){
+    # Just guidance. Don't automate that initial_setup from this actual script aight
+    return 1
+
+    case $distro in
+        'ubuntu') bash -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/dotfiles/main/scripts/autosetup/UbuntuServer-base.sh)" ;;
+        'fedora') bash -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/dotfiles/main/scripts/autosetup/FedoraServer-base.sh)" ;;
+        'arch') xdg-open "https://github.com/pabloqpacin/dotfiles/blob/main/docs/linux/Arch_Hypr.md" ;;
+        *) echo "craft yeself" ;;
+    esac
+}
 
 install_docker(){
 
+    if docker &>/dev/null; then
+        echo -e "== ${YELLOW}Docker already installed '$distro'${RESET} =="
+        docker --version
+        return 1
+    else
+        echo -e "== ${YELLOW}Installing Docker on '$distro'${RESET} =="
+    fi
+
     case $distro in
 
-        'debian'|'ubuntu')
-
-            echo -e "== ${YELLOW}INSTALLING DOCKER ON $distro${RESET} =="
-
+        'ubuntu'|'debian'|'pop')
             # Add Docker's official GPG key:
             sudo apt-get update
             sudo apt-get install ca-certificates curl
             sudo install -m 0755 -d /etc/apt/keyrings
             sudo curl -fsSL https://download.docker.com/linux/$distro/gpg -o /etc/apt/keyrings/docker.asc
             sudo chmod a+r /etc/apt/keyrings/docker.asc
-
             # Add the repository to Apt sources:
             echo \
                 "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/$distro \
@@ -36,45 +58,34 @@ install_docker(){
                 sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
             sudo apt-get update
 
-            # Install the packages
             sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-
             sudo systemctl enable --now docker
             sudo usermod -aG docker $USER
-
-            ;;
+        ;;
 
         'fedora')
-
-            echo -e "== ${YELLOW}INSTALLING DOCKER ON $distro${RESET} =="
-
             # Install the dnf-plugins-core package (which provides the commands to manage your DNF repositories) and set up the repository.
             sudo dnf -y install dnf-plugins-core
             sudo dnf config-manager --add-repo https://download.docker.com/linux/fedora/docker-ce.repo
-            
-            # Install Docker Engine, containerd, and Docker Compose
+
             yes | sudo dnf install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-            
             sudo systemctl enable --now docker
             sudo usermod -aG docker $USER
-
-            ;;
+        ;;
 
         'arch')
-
-            echo -e "== ${YELLOW}INSTALLING DOCKER ON $distro${RESET} =="
-
             sudo pacman -Sy docker docker-buildx docker-compose
-            ;;
+        ;;
 
-        *)
-            echo "time 2 troubleshoot"
-            ;;
+        *) ;;
     esac
 }
 
 
 check_ports(){
+    # WIP
+    return 1
+
     ports=('6643' '2379' '2380' '10250' '10259' '10257' '30000' '32767')
     for i in "${!ports[@]}"; do
         ncat localhost "${ports[i]}" -v || nc localhost "${ports[i]}" -v
@@ -245,17 +256,8 @@ setup_control_plane(){
 # ==============================================================================
 
 
-YELLOW='\e[31m'
-RESET='\e[0m'
-
 check_distro
-
-
-if docker &>/dev/null; then
-    echo "Docker is installed already"
-else
-    install_docker      # docker docker-buildx docker-compose
-fi
+install_docker
 
 # check_swap            # -> /etc/fstab
 # check_ports            # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#check-required-ports
