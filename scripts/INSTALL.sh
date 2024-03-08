@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 # ##################################################
-# Must be updated upon software releases.
+# Must be updated upon software releases
 # Just guidance aight
+# Assuming LAN is 192.168.1.0/24
+# Kubeadm pod-network defined as 10.0.0.0/16
 # ##################################################
 
 RESET='\e[0m'
@@ -33,9 +35,8 @@ initial_setup(){
 }
 
 install_docker(){
-
     if docker &>/dev/null; then
-        echo -e "== ${YELLOW}Docker already installed '$distro'${RESET} =="
+        echo -e "== ${YELLOW}Docker already installed on '$distro'${RESET} =="
         docker --version
         return 1
     else
@@ -43,7 +44,6 @@ install_docker(){
     fi
 
     case $distro in
-
         'ubuntu'|'debian'|'pop')
             # Add Docker's official GPG key:
             sudo apt-get update
@@ -81,7 +81,6 @@ install_docker(){
     esac
 }
 
-
 check_ports(){
     # WIP
     return 1
@@ -96,114 +95,101 @@ check_ports(){
     done
 }
 
+disable_swap(){
+    if ! grep -q 'dev' /proc/swaps; then
+        return 1
+    fi
+    
+    case $distro in
+        'ubuntu')
+            sudo sed -i '/swap/s/^/# /' /etc/fstab &&
+            sudo swapoff --all
+        ;;
+        'fedora')
+            sudo dnf remove -y zram-generator-defaults &&
+            sudo swapoff --all
+        ;;
+    esac
+}
+
 install_kubernetes(){
-    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+    if kubectl &>/dev/null; then
+        echo -e "== ${YELLOW}Kubernetes already installed on '$distro'${RESET} =="
+        kubectl version
+        return 1
+    else
+        echo -e "== ${YELLOW}Installing Kubernetes on '$distro'${RESET} =="
+    fi
 
     case $distro in
-
-        'debian' | 'ubuntu')
-
-            echo -e "== ${YELLOW}INSTALLING KUBERNETES ON $distro${RESET} =="
-
-            # Update the apt package index and install packages needed to use the Kubernetes apt repository
+        'ubuntu'|'debian'|'pop')
             sudo apt-get update
             sudo apt-get install -y apt-transport-https ca-certificates curl gpg
-
             # Download the public signing key for the Kubernetes package repositories. The same signing key is used for all repositories so you can disregard the version in the URL:
-            # If the folder `/etc/apt/keyrings` does not exist, it should be created before the curl command, read the note below. -- Note: In releases older than Debian 12 and Ubuntu 22.04, folder /etc/apt/keyrings does not exist by default, and it should be created before the curl command.
-            # sudo mkdir -p -m 755 /etc/apt/keyrings
+            if [ ! -d '/etc/apt/keyrings' ]; then sudo mkdir -p -m 755 /etc/apt/keyrings; fi
             curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
-
-            # Add the appropriate Kubernetes apt repository. Please note that this repository have packages only for Kubernetes 1.29; for other Kubernetes minor versions, you need to change the Kubernetes minor version in the URL to match your desired minor version (you should also check that you are reading the documentation for the version of Kubernetes that you plan to install).
-            # This overwrites any existing configuration in /etc/apt/sources.list.d/kubernetes.list
+            # Add the appropriate Kubernetes apt repository. Please note that this repository have packages only for Kubernetes 1.29
             echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list
-
             # Update the apt package index, install kubelet, kubeadm and kubectl, and pin their version:
             sudo apt-get update
             sudo apt-get install -y kubelet kubeadm kubectl
             sudo apt-mark hold kubelet kubeadm kubectl
-
-            # sudo systemctl enable --now kubelet
-
-            # # ...
-            # wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.10/cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
-            # sudo dpkg -i cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
-
-            ;;
+            sudo systemctl enable --now kubelet
+        ;;
 
         'fedora')
-
-            echo -e "== ${YELLOW}INSTALLING KUBERNETES ON $distro${RESET} =="
-
             # Set SELinux in permissive mode (effectively disabling it)
             sudo setenforce 0
             sudo sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
-
             # This overwrites any existing configuration in /etc/yum.repos.d/kubernetes.repo
-            cat <<EOF | sudo tee /etc/yum.repos.d/kubernetes.repo
-[kubernetes]
-name=Kubernetes
-baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/
-enabled=1
-gpgcheck=1
-gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key
-exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni
-EOF
-
+            {
+                echo '[kubernetes]'
+                echo 'name=Kubernetes'
+                echo 'baseurl=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/'
+                echo 'enabled=1'
+                echo 'gpgcheck=1'
+                echo 'gpgkey=https://pkgs.k8s.io/core:/stable:/v1.29/rpm/repodata/repomd.xml.key'
+                echo 'exclude=kubelet kubeadm kubectl cri-tools kubernetes-cni'
+            } | sudo tee /etc/yum.repos.d/kubernetes.repo
             # Install kubelet, kubeadm and kubectl, and enable kubelet to ensure it's automatically started on startup:
             sudo yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
             sudo systemctl enable --now kubelet
-
-            ;;
+        ;;
 
         'arch')
-
-            echo -e "== ${YELLOW}INSTALLING KUBERNETES ON $distro${RESET} =="
-
             # Replace iptables for iptables-nft
             yes | sudo pacman -Sy kubeadm kubelet kubectl helm
             sudo systemctl enable --now kubelet
-            ;;
+        ;;
 
-        *) 
-            echo "time 2 troubleshoot"
-            ;;
-
+        *) ;;
     esac
-
 }
 
 setup_cluster(){
+    MOAR_FIXES
     setup_control_plane
     setup_nodes_plane
 }
 
+MOAR_FIXES(){
+    
+    # FEDORA
+    # sudo firewall-cmd --zone=public --add-port=6443/tcp --permanent
+    # sudo firewall-cmd --zone=public --add-port=10250/tcp --permanent
+    # sudo firewall-cmd --reload
+
+    # UBUNTU -- likely DON'T
+    # wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.10/cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
+    # sudo dpkg -i cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
+
+}
+
 setup_control_plane(){
 
-    case $distro in
-        'ubuntu')
-
-            # FIX SWAP
-            sudo swapoff --all && sudo sed -i '/swap/s/^/# /' /etc/fstab
-            
             # FIX [ERROR CRI] -- https://github.com/containerd/containerd/issues/8139; https://k21academy.com/docker-kubernetes/container-runtime-is-not-running/
             sudo mv /etc/containerd/config.toml{,.bak} && sudo systemctl restart containerd
 
-
-            ;;
-
-        'fedora')
-            sudo swapoff --all
-            sudo dnf remove -y zram-generator-defaults
-
-            sudo firewall-cmd --zone=public --add-port=6443/tcp --permanent
-            sudo firewall-cmd --zone=public --add-port=10250/tcp --permanent
-            sudo firewall-cmd --reload
-            
-            ;;
-
-        *)  ;;
-    esac
 
 
     # Tener en cuenta la red local -- OJO con el TOKEN para los worker nodes
@@ -257,19 +243,13 @@ setup_control_plane(){
 
 
 check_distro
-install_docker
+install_docker              # ...
 
-# check_swap            # -> /etc/fstab
-# check_ports            # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#check-required-ports
-
-
-if kubectl &>/dev/null; then
-    echo "Kubernetes is installed already"
-else
-    install_kubernetes  # kubeadm + kubelet + kubectl
-    # https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/configure-cgroup-driver/
-fi
-
+# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
+check_ports
+disable_swap
+install_kubernetes  # kubeadm + kubelet + kubectl
+# OJO: https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/configure-cgroup-driver/
 
 # setup_cluster --> arch chungo
 # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
