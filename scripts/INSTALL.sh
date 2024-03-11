@@ -2,9 +2,10 @@
 
 # ##################################################
 # Must be updated upon software releases
-# Just guidance aight
-# Assuming LAN is 192.168.1.0/24
 # Kubeadm pod-network defined as 10.0.0.0/16
+# Assuming LAN is 192.168.1.0/24
+# Testing NAT 192.168.10.0/24
+# $ bash -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/k8s-bs/main/scripts/INSTALL.sh)"
 # ##################################################
 
 RESET='\e[0m'
@@ -30,7 +31,7 @@ initial_setup(){
         'ubuntu') bash -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/dotfiles/main/scripts/autosetup/UbuntuServer-base.sh)" ;;
         'fedora') bash -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/dotfiles/main/scripts/autosetup/FedoraServer-base.sh)" ;;
         'arch') xdg-open "https://github.com/pabloqpacin/dotfiles/blob/main/docs/linux/Arch_Hypr.md" ;;
-        *) echo "craft yeself" ;;
+        *) : ;;
     esac
 }
 
@@ -168,17 +169,44 @@ install_kubernetes(){
     esac
 }
 
+config_containerd(){
+    echo -e "\n== ${YELLOW}Defining Cgroup for Containerd on '$distro'${RESET} =="
+
+    if [[ $distro == 'arch' && ! -d /etc/containerd ]]; then
+        sudo mkdir /etc/containerd
+    fi
+
+    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#configuring-a-cgroup-driver
+    if ! grep -qs -e 'Cgroup' /etc/containerd/config.toml; then
+        if [ -e /etc/containerd/config.toml ]; then
+            sudo mv /etc/containerd/config.toml{,.bak}
+        fi
+        {
+            echo '# Content of file /etc/containerd/config.toml -- https://stackoverflow.com/a/74695867'
+            echo 'version = 2'
+            echo '[plugins]'
+            echo '  [plugins."io.containerd.grpc.v1.cri"]'
+            echo '   [plugins."io.containerd.grpc.v1.cri".containerd]'
+            echo '      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]'
+            echo '        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]'
+            echo '          runtime_type = "io.containerd.runc.v2"'
+            echo '          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]'
+            echo '            SystemdCgroup = true'
+        } | sudo tee /etc/containerd/config.toml
+        sudo systemctl restart containerd
+    fi
+}
+
 setup_cluster(){
 
     echo -e "\n== ${YELLOW}====================${RESET} =="
 
     MoW=''
     while [[ $MoW != 'y' && $MoW != 'n' && $MoW != 'q' ]]; do
-        read -p "Set up this HOST as the cluster's master node? [y/n] " MoW
+        read -p "Set up this HOST as the cluster's master node? [y/n/q] " MoW
 
         case $MoW in
             'y')
-                master_tweak_containerd
                 setup_master_node
             ;;
 
@@ -195,41 +223,8 @@ setup_cluster(){
     done
 }
 
-master_tweak_containerd(){
-    # Ubuntu only
-    if [[ $distro != 'ubuntu' ]]; then
-        return 1
-    else
-        echo -e "\n== ${YELLOW}Defining Cgroup for Containerd on '$distro'${RESET} =="
-    fi
-
-    # https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#configuring-a-cgroup-driver
-    if ! grep -q -e 'Cgroup' /etc/containerd/config.toml; then
-        sudo mv /etc/containerd/config.toml{,.bak}
-        {
-            echo '# Content of file /etc/containerd/config.toml -- https://stackoverflow.com/a/74695867'
-            echo 'version = 2'
-            echo '[plugins]'
-            echo '  [plugins."io.containerd.grpc.v1.cri"]'
-            echo '   [plugins."io.containerd.grpc.v1.cri".containerd]'
-            echo '      [plugins."io.containerd.grpc.v1.cri".containerd.runtimes]'
-            echo '        [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc]'
-            echo '          runtime_type = "io.containerd.runc.v2"'
-            echo '          [plugins."io.containerd.grpc.v1.cri".containerd.runtimes.runc.options]'
-            echo '            SystemdCgroup = true'
-            echo 
-        } | sudo tee  /etc/containerd/config.toml
-        sudo systemctl restart containerd
-    fi
-}
-
 setup_master_node(){
-    # Ubuntu only
-    if [[ $distro != 'ubuntu' ]]; then
-        return 1
-    else
-        echo -e "\n== ${YELLOW}Setting up Kubeadm and Calico!!${RESET} =="
-    fi
+    echo -e "\n== ${YELLOW}Setting up Kubeadm and Calico!!${RESET} =="
 
     # https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
     sudo kubeadm init --pod-network-cidr=10.0.0.0/16
@@ -239,7 +234,8 @@ setup_master_node(){
         exit 1
     fi
 
-    echo ""
+    echo -e "\n== ${YELLOW}====================${RESET} =="
+
     token_saved=''
     while [[ $token_saved != 'ok' ]]; do
         read -p "Save the token to some file. Enter 'ok' to continue: " token_saved
@@ -249,11 +245,13 @@ setup_master_node(){
     sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config &&
     sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
+    # TODO: change NAT subnetting
     kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/tigera-operator.yaml
     wget https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/custom-resources.yaml &&
-        sed -i 's/192.168.0.0/10.0.0.0/' custom-resources.yaml
+        sed -i 's/192.168.0.0/10.0.0.0/' custom-resources.yaml &&
         kubectl create -f custom-resources.yaml &&
         rm custom-resources.yaml
+
 
     echo -e "\n== ${GREEN}Script finished!! ${YELLOW}Verify them pods are being created!${RESET} =="
     echo '.....' && sleep 1
@@ -279,55 +277,11 @@ setup_worker_node(){
 
 
 check_distro
-install_docker              # ...
+install_docker              # docker + compose + containerd + buildx
 
-check_ports
 disable_swap
 install_kubernetes          # kubeadm + kubelet + kubectl
 
+config_containerd
 setup_cluster
 
-
-
-
-# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/
-# OJO: https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/configure-cgroup-driver/
-
-# setup_cluster --> arch chungo
-# https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/
-# https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
-
-# install_minikube
-
-
-
-# ==============================================================================
-
-#             sudo sed -i '/disabled_plugins.*/s/^/# /' /etc/containerd/config.toml
-#             echo '
-# enabled_plugins = ["cri"]
-# [plugins."io.containerd.grpc.v1.cri".containerd]
-#   endpoint = "unix:///var/run/containerd/containerd.sock"' | sudo tee -a /etc/containerd/config.toml
-
-
-# MOAR_FIXES(){
-    
-#     # FEDORA
-#     # sudo firewall-cmd --zone=public --add-port=6443/tcp --permanent
-#     # sudo firewall-cmd --zone=public --add-port=10250/tcp --permanent
-#     # sudo firewall-cmd --reload
-
-#     # UBUNTU -- likely DON'T
-#     # wget https://github.com/Mirantis/cri-dockerd/releases/download/v0.3.10/cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
-#     # sudo dpkg -i cri-dockerd_0.3.10.3-0.ubuntu-jammy_amd64.deb
-#     :
-# }
-
-
-    # # CONTAINERD ~~~~> FIX [ERROR CRI] -- https://github.com/containerd/containerd/issues/8139; https://k21academy.com/docker-kubernetes/container-runtime-is-not-running/
-    # sudo mv /etc/containerd/config.toml{,.bak} && sudo systemctl restart containerd
-    # ... + Connection refused lol
-
-
-    # sudo kubeadm init --pod-network-cidr=10.0.0.0/16
-    # # W0308 12:55:11.692043    2769 checks.go:835] detected that the sandbox image "registry.k8s.io/pause:3.6" of the container runtime is inconsistent with that used by kubeadm. It is recommended that using "registry.k8s.io/pause:3.9" as the CRI sandbox image.

@@ -1,71 +1,52 @@
-# Curso [Kubernetes al completo](https://www.udemy.com/course/kubernetes-al-completo/)
-
-> Solo lo importante. Cheatsheets
+# Kubernetes al completo ([udemy](https://www.udemy.com/course/kubernetes-al-completo/))
 
 <details>
 <summary>Table of Contents</summary>
 
 
-- [Curso Kubernetes al completo](#curso-kubernetes-al-completo)
-  - [NOTAS](#notas)
-  - [1. Introducción](#1-introducción)
-  - [2. Kubectl: trabajar con clusters](#2-kubectl-trabajar-con-clusters)
-  - [3. Minikube: trabajar en local](#3-minikube-trabajar-en-local)
-  - [4. Docker Desktop: trabajar en local](#4-docker-desktop-trabajar-en-local)
-  - [5. VSCode](#5-vscode)
-  - [6. PODS](#6-pods)
-    - [PODs con Manifest](#pods-con-manifest)
-    - [reboot policy](#reboot-policy)
-  - [7. LABELS, Selectors, Anotaciones -- Etiquetar objetos](#7-labels-selectors-anotaciones----etiquetar-objetos)
-  - [8. Deployments](#8-deployments)
-  - [9. Servicios](#9-servicios)
-  - [10. Ejemplo Aplicación PHP-REDIS con Servicios (!)](#10-ejemplo-aplicación-php-redis-con-servicios-)
-  - [11. Namespaces -- agrupar objetos](#11-namespaces----agrupar-objetos)
-  - [12. Rolling Updates](#12-rolling-updates)
-  - [13. Variables, ConfigMaps y Secrets](#13-variables-configmaps-y-secrets)
-      - [Secrets ](#secrets-)
-  - [14. Kubeconfig: configuración del cluster](#14-kubeconfig-configuración-del-cluster)
-  - [15. Crear un cluster real con Kubeadm con VMs (!)](#15-crear-un-cluster-real-con-kubeadm-con-vms-)
-  - [16. Scheduler -- Asignar Pods a Nodos](#16-scheduler----asignar-pods-a-nodos)
-  - [17. Asignación de recursos y Autoescalado](#17-asignación-de-recursos-y-autoescalado)
-  - [18. Almacenamiento en Kubernetes](#18-almacenamiento-en-kubernetes)
-  - [19. Storage Class -- almacenamiento dinámico](#19-storage-class----almacenamiento-dinámico)
-  - [20. Otros Worklokind: Podads -- más allá de los Deployments](#20-otros-worklokind-podads----más-allá-de-los-deployments)
-  - [21. Sondas -- PODS monitoring](#21-sondas----pods-monitoring)
-  - [22. RBAC -- Seguridad en clusters](#22-rbac----seguridad-en-clusters)
-  - [23. Ingress -- conectar servicios al exterior](#23-ingress----conectar-servicios-al-exterior)
-  - [24. Amazon EKS. Amazon Elastic Kubernetes](#24-amazon-eks-amazon-elastic-kubernetes)
-  - [25. Azure AKS. Azure Kubernetes Services](#25-azure-aks-azure-kubernetes-services)
-  - [26. Próximas secciones](#26-próximas-secciones)
-  - [27. Cierre y despedida](#27-cierre-y-despedida)
+- [Kubernetes al completo (udemy)](#kubernetes-al-completo-udemy)
+  - [PARTE 1](#parte-1)
+    - [1. Introducción](#1-introducción)
+    - [2. Kubectl: trabajar con clusters](#2-kubectl-trabajar-con-clusters)
+    - [3. Minikube: trabajar en local](#3-minikube-trabajar-en-local)
+    - [4. Docker Desktop: trabajar en local](#4-docker-desktop-trabajar-en-local)
+    - [5. VSCode](#5-vscode)
+    - [6. PODS](#6-pods)
+      - [PODs con Manifest](#pods-con-manifest)
+      - [reboot policy](#reboot-policy)
+    - [7. LABELS, Selectors, Anotaciones -- Etiquetar objetos](#7-labels-selectors-anotaciones----etiquetar-objetos)
+    - [8. Deployments](#8-deployments)
+    - [9. Servicios](#9-servicios)
+    - [10. Ejemplo Aplicación PHP-REDIS con Servicios (!)](#10-ejemplo-aplicación-php-redis-con-servicios-)
+    - [11. Namespaces -- agrupar objetos](#11-namespaces----agrupar-objetos)
+    - [12. Rolling Updates](#12-rolling-updates)
+    - [13. Variables, ConfigMaps y Secrets](#13-variables-configmaps-y-secrets)
+        - [Secrets ](#secrets-)
+    - [14. Kubeconfig: configuración del cluster](#14-kubeconfig-configuración-del-cluster)
+  - [PARTE 2](#parte-2)
+    - [~~15. Crear un cluster real con Kubeadm con VMs (!)~~](#15-crear-un-cluster-real-con-kubeadm-con-vms-)
+    - [~~16. Scheduler -- Asignar Pods a Nodos~~](#16-scheduler----asignar-pods-a-nodos)
+    - [~~17. Asignación de recursos y Autoescalado~~](#17-asignación-de-recursos-y-autoescalado)
+    - [~~18. Almacenamiento en Kubernetes~~](#18-almacenamiento-en-kubernetes)
+    - [~~19. Storage Class -- almacenamiento dinámico~~](#19-storage-class----almacenamiento-dinámico)
+    - [~~20. Otros Worklokind: Podads -- más allá de los Deployments~~](#20-otros-worklokind-podads----más-allá-de-los-deployments)
+    - [~~21. Sondas -- PODS monitoring~~](#21-sondas----pods-monitoring)
+    - [~~22. RBAC -- Seguridad en clusters~~](#22-rbac----seguridad-en-clusters)
+    - [~~23. Ingress -- conectar servicios al exterior~~](#23-ingress----conectar-servicios-al-exterior)
+    - [~~24. Amazon EKS. Amazon Elastic Kubernetes~~](#24-amazon-eks-amazon-elastic-kubernetes)
+    - [~~25. Azure AKS. Azure Kubernetes Services~~](#25-azure-aks-azure-kubernetes-services)
+    - [~~26. Próximas secciones~~](#26-próximas-secciones)
+    - [~~27. Cierre y despedida~~](#27-cierre-y-despedida)
 
 
 </details>
 
 <!-- Destacan las secciones: 10, 12, 15, -->
 
-## NOTAS
 
-- sudo apt-get install [golang-k8s-utils-dev](https://packages.debian.org/unstable/golang/golang-k8s-utils-dev)
-- [Access Services Running on Clusters](https://kubernetes.io/docs/tasks/access-application-cluster/access-cluster-services/)
-  - [Use an HTTP Proxy to Access the Kubernetes API](https://kubernetes.io/docs/tasks/extend-kubernetes/http-proxy-access-api/)
-  - [How to use minikube with a VPN or HTTP/HTTPS Proxy](https://minikube.sigs.k8s.io/docs/handbook/vpn_and_proxy/)
-- [minikube start --static-ip](https://minikube.sigs.k8s.io/docs/tutorials/static_ip/)
-- `kubectl get pod foo -o yaml`
-  - **KUBERNETES QUIERE QUE EL `STATUS` COINCIDA CON LA `SPEC`**
-- [minikube LAN access...](https://stackoverflow.com/questions/66873437/access-minikube-cluster-on-the-same-network)
-- LOG stuff: `kubectl get events -n <ns> -w` <!-- kubectl get events --field-selector reason="Failed" -w -->
-- Check rollout: `kcaf <foo.yaml> && kubectl rollout status deploy <deploy> -w`
-- para pods con OS, meterles `command: [ "/bin/sh", "-c", "sleep 1000000" ]` para que no 'se apaguen'
-- secrets
-  - https://www.reddit.com/r/kubernetes/comments/17px983/if_secrets_are_encoded_in_base64_format_why_to/
+## PARTE 1
 
----
-
-- [Google's Artifact Registry](https://cloud.google.com/artifact-registry/docs?hl=es-419)
-
-
-## 1. Introducción
+### 1. Introducción
 
 - Intro a Kubernetes
 
@@ -139,7 +120,7 @@
 - *Cloud*: Amazon EKS, Azure AKS, Google GKE, IBM IKS, Oracle KS, Alibaba KS
 ```
 
-## 2. Kubectl: trabajar con clusters
+### 2. Kubectl: trabajar con clusters
 
 - Intro
 
@@ -181,7 +162,7 @@ curl -LO https://dl.k8s.io/release/v1.29.1/bin/linux/arm64/kubectl
 # ...
 ``` -->
 
-## 3. Minikube: trabajar en local
+### 3. Minikube: trabajar en local
 
 > [minikube]((https://minikube.sigs.k8s.io/docs/start/))
 
@@ -342,12 +323,12 @@ minikube delete -p <nombre_cluster>
 </details>
 
 
-## 4. Docker Desktop: trabajar en local
+### 4. Docker Desktop: trabajar en local
 
 > ...
 
 
-## 5. VSCode
+### 5. VSCode
 
 ```bash
 extensions=(
@@ -364,7 +345,7 @@ done
 bat ~/.kube/config -l yaml
 ```
 
-## 6. PODS
+### 6. PODS
 
 - Intro
 
@@ -534,7 +515,7 @@ numeros: [uno, dos, tres]
 </details>
 
 
-### PODs con Manifest
+#### PODs con Manifest
 
 > - [ ] Registros privados/locales para docker images + kubelet
 
@@ -745,7 +726,7 @@ kubectl apply -f nginx.yaml
 
 > Normalmente no se trabaja con pods directamente (sino `deployments`)
 
-### reboot policy
+#### reboot policy
 
 - Rebotar Pods (reboot) -- *always* (predefinida), onfailure, never
 
@@ -862,7 +843,7 @@ kubectl apply -f nginx.yaml
 ```
 
 
-## 7. LABELS, Selectors, Anotaciones -- Etiquetar objetos
+### 7. LABELS, Selectors, Anotaciones -- Etiquetar objetos
 
 > Localizar, relacionar y buscar objetos y componentes
 
@@ -1034,7 +1015,7 @@ minikube dashboard
 ```
 
 
-## 8. Deployments
+### 8. Deployments
 
 - Workloads y Controllers (Controller en ControlPlane...)
   - Workloads: Pods... deployment, replica set, stateful set, daemon set, job, cron job... controllers
@@ -1192,7 +1173,7 @@ kubectl scale deploy -l estado=1 --replicas=2
 
 ...
 
-## 9. Servicios
+### 9. Servicios
 
 - Intro
   - Entre clientes y deployments; ip fija, nombre fijo, puerto fijo
@@ -1400,7 +1381,7 @@ kubectl describe svc <foo>
 ```
 
 
-## 10. Ejemplo Aplicación PHP-REDIS con Servicios (!)
+### 10. Ejemplo Aplicación PHP-REDIS con Servicios (!)
 
 - Enunciado
   - PHP (NodePort) + Redis Clientes (ClusterIP) + Redis Master (ClusterIP)
@@ -1616,7 +1597,7 @@ kubectl describe svc frontend | grep 'NodePort'
 curl $(minikube ip):31942     # FAIL
 ```
 
-## 11. Namespaces -- agrupar objetos
+### 11. Namespaces -- agrupar objetos
 
 - Intro
   - Como particiones del cluster para poner objetos (división lógica en zonas)
@@ -1792,7 +1773,7 @@ kubectl get events -w
 kubectl get events --field-selector reason="Failed" -w
 ```
 
-## 12. Rolling Updates
+### 12. Rolling Updates
 
 - Aplicar cambios sin reinciar contenedores (`strategy`)
   - `RollingUpdate`: los pods se modifican poco a poco
@@ -1935,7 +1916,7 @@ kubectl describe deploy nginx-d | grep 'Strategy'
 kubectl rollout history deploy nginx-d
 ```
 
-## 13. Variables, ConfigMaps y Secrets
+### 13. Variables, ConfigMaps y Secrets
 
 - Variables (variables normales de Docker, gestionadas por K8S)
 
@@ -2240,7 +2221,7 @@ kubectl exec -it pod1 -- sh
   # cat /etc/config-map/VERSION
 ```
 
-#### Secrets <!--configmap encriptado-->
+##### Secrets <!--configmap encriptado-->
 
 - Teoría
 
@@ -2549,7 +2530,7 @@ kubectl apply -f pod-docker.yaml
 kubectl exec -it ejemplo -- sh -c 'mysql -u topuria -p"topuria420;" -D topuria -e "select * from users;"'
 ```
 
-## 14. Kubeconfig: configuración del cluster
+### 14. Kubeconfig: configuración del cluster
 
 > `kubectl config view && kubectl config --help`
 
@@ -2751,160 +2732,17 @@ kubectl config --kubeconfig=config_alt set-context context-cluster2 --cluster=cl
 kubectl config --kubeconfig=config_alt use-context context-cluster2
 ```
 
-## 15. Crear un cluster real con Kubeadm con VMs (!)
-
-- NOTAS
-  - No `minikube` sino `kubeadm`
-  - 1 master + N esclavos
-- VMs 
-  - NO SWAP
-  - [github.com/dotfiles/scripts/setup/KUBERNETES.sh](#)
-- Kubernetes Networking Model
-
-```md
-- Kubernetes no gestiona la red: lo cede al **container runtime** CR (docker engine, containerd, ...)
-- MODELO de red
-  - consistencia en múltiples topologías
-  - determina relaciones entre componentes (contenedores, pods, servicios...)
-  - CARACTERÍSTICAS: 1 pod 1 IP, N contenedores 1 IP, N pods se ven (IPs, sin NAT), existen filtros
-  - 1 pod 1 host virtual (~ vm)
-- IMPLEMENTACIÓN
-  - mediante **plugins** de 3os -> según estándar CNI gestionado por CR
-  - tipos: Network (conexión pods a red) VS IPAM (direccionamiento, poderoso)
-  - > https://www.cni.dev/docs/
-  - > https://kubernetes.io/docs/concepts/cluster-administration/addons/
-  - **Calico**: networking + network policy
-- Kubernetes DNS
-  - 1 cluster 1 servicio DNS -> localizar pods, servicios etc
-  - ejemplos:
-    - `mi-servicio.mi-namespace.svc.cluster-domain.curso`
-    - `pod-ip-address.mi-namespace.pod.cluster-domain.curso`
-```
-
-- Bootstrapping del cluster con Kubeadm
-
-> https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart
-
-```bash
-# https://medium.com/@cminion/quicknote-kubernetes-networking-issues-78f1e0d06e12
-
-# MI RED LOCAL == 192.168.1.0/24
-# sudo kubeadm init --pod-network-cidr=192.168.80.0/24
-#   # [certs] apiserver serving cert is signed for DNS names [archvm kubernetes kubernetes.default kubernetes.default.svc kubernetes.default.svc.cluster.local] and IPs [10.96.0.1 192.168.1.44]
-#   # ...
-sudo kubeadm init --pod-network-cidr=10.0.0.0/16
-
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
-  # ls -la $HOME/.kube/config -> 0600 permissions
-
-        # kubectl get nodes --> NotReady is good
-
-# # sudo systemctl restart kubelet    # ?
-
-kubectl get nodes
-```
-
-- Instalar plugin network **Calico**
-  - **operador**: componente para despliegues complejos, tipo plantilla... 
-
-```bash
-# Create namespace, deployment serviceaccount, ...
-kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/tigera-operator.yaml
-
-# Create operator's apiserver and installation
-kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/custom-resources.yaml
-
-```
-
-<details>
-<summary>Logs</summary>
-
-```txt
-
-```
-
-```txt
-$ kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/tigera-operator.yaml
-
-namespace/tigera-operator created
-customresourcedefinition.apiextensions.k8s.io/bgpconfigurations.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/bgpfilters.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/bgppeers.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/blockaffinities.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/caliconodestatuses.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/clusterinformations.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/felixconfigurations.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/globalnetworkpolicies.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/globalnetworksets.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/hostendpoints.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/ipamblocks.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/ipamconfigs.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/ipamhandles.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/ippools.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/ipreservations.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/kubecontrollersconfigurations.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/networkpolicies.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/networksets.crd.projectcalico.org created
-customresourcedefinition.apiextensions.k8s.io/apiservers.operator.tigera.io created
-customresourcedefinition.apiextensions.k8s.io/imagesets.operator.tigera.io created
-customresourcedefinition.apiextensions.k8s.io/installations.operator.tigera.io created
-customresourcedefinition.apiextensions.k8s.io/tigerastatuses.operator.tigera.io created
-serviceaccount/tigera-operator created
-clusterrole.rbac.authorization.k8s.io/tigera-operator created
-clusterrolebinding.rbac.authorization.k8s.io/tigera-operator created
-deployment.apps/tigera-operator created
-
-$ kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.2/manifests/custom-resources.yaml
-installation.operator.tigera.io/default created
-apiserver.operator.tigera.io/default created
-```
-
-
-
-</details>
-
-
-<!-- ---
-```bash
-```
-```yaml
-```
-```bash
-``` -->
-
----
-
-## 16. Scheduler -- Asignar Pods a Nodos
-## 17. Asignación de recursos y Autoescalado
-## 18. Almacenamiento en Kubernetes
-## 19. Storage Class -- almacenamiento dinámico
-## 20. Otros Worklokind: Podads -- más allá de los Deployments
-## 21. Sondas -- PODS monitoring
-## 22. RBAC -- Seguridad en clusters
-## 23. Ingress -- conectar servicios al exterior
-## 24. Amazon EKS. Amazon Elastic Kubernetes
-## 25. Azure AKS. Azure Kubernetes Services
-## 26. Próximas secciones
-## 27. Cierre y despedida
-
-
-
-<!-- ---
----
-
-- [@PeladoNerd: MANEJA LOS RECURSOS DE TUS PODS EN KUBERNETES - Requests y Limits](https://www.youtube.com/watch?v=xTTJg1aJ4kg)
-
-```bash
-kubectl get nodes
-kubectl describe node minikube
-  # Tema CPU: 200ms será 10% o else según las cores en Capacity
-
-# $ kubectl scale --replicas=10 deployment hello
-```
-- [ ] servicios internos de DNS (Pods)?
----
-> DNS
-- [@DigitalOcean: Introducción al servicio DNS de Kubernetes](https://www.digitalocean.com/community/tutorials/an-introduction-to-the-kubernetes-dns-service-es)
-- [@Kubernetes: DNS for Services and Pods](https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/) -->
+## PARTE 2
+### ~~15. Crear un cluster real con Kubeadm con VMs (!)~~
+### ~~16. Scheduler -- Asignar Pods a Nodos~~
+### ~~17. Asignación de recursos y Autoescalado~~
+### ~~18. Almacenamiento en Kubernetes~~
+### ~~19. Storage Class -- almacenamiento dinámico~~
+### ~~20. Otros Worklokind: Podads -- más allá de los Deployments~~
+### ~~21. Sondas -- PODS monitoring~~
+### ~~22. RBAC -- Seguridad en clusters~~
+### ~~23. Ingress -- conectar servicios al exterior~~
+### ~~24. Amazon EKS. Amazon Elastic Kubernetes~~
+### ~~25. Azure AKS. Azure Kubernetes Services~~
+### ~~26. Próximas secciones~~
+### ~~27. Cierre y despedida~~
