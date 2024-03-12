@@ -12,7 +12,7 @@ subgraph LAN[LAN 192.168.1.0/24]
 HOST(HOST Pop!_OS w/ VirtualBox)
 end
 
-HOST ---- NAT
+HOST -..- 201_ubuntu
 
 
 subgraph NAT[NAT 192.168.10.0/24]
@@ -35,7 +35,7 @@ end
 
 </details>
 
-- [docs/virtualbox_nat.md](/docs/virtualbox_nat.md): instalación de máquinas virtuales, configuración de DHCP y DNS (en `201_ubuntu`) para direccionamiento IP estático
+- [docs/virtualbox_nat.md](/docs/virtualbox_nat.md): instalación de máquinas virtuales en red NAT, configuración de DHCP y DNS (en `201_ubuntu`) para direccionamiento IP estático, ejecución de `INSTALL.sh`
   - **Distros**: Ubuntu y Fedora (worker nodes), Archlinux (master node)
 
 
