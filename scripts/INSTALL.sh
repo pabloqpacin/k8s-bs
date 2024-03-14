@@ -111,6 +111,9 @@ disable_swap(){
         'fedora')
             sudo dnf remove -y zram-generator-defaults &&
             sudo swapoff --all
+
+            # OJO
+            sudo systemctl disable --now firewalld
         ;;
     esac
 }
