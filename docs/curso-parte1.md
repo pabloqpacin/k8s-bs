@@ -29,7 +29,7 @@
     - [~~17. Asignación de recursos y Autoescalado~~](#17-asignación-de-recursos-y-autoescalado)
     - [~~18. Almacenamiento en Kubernetes~~](#18-almacenamiento-en-kubernetes)
     - [~~19. Storage Class -- almacenamiento dinámico~~](#19-storage-class----almacenamiento-dinámico)
-    - [~~20. Otros Worklokind: Podads -- más allá de los Deployments~~](#20-otros-worklokind-podads----más-allá-de-los-deployments)
+    - [~~20. Otros Workloads -- más allá de los Deployments~~](#20-otros-workloads----más-allá-de-los-deployments)
     - [~~21. Sondas -- PODS monitoring~~](#21-sondas----pods-monitoring)
     - [~~22. RBAC -- Seguridad en clusters~~](#22-rbac----seguridad-en-clusters)
     - [~~23. Ingress -- conectar servicios al exterior~~](#23-ingress----conectar-servicios-al-exterior)
@@ -2738,7 +2738,7 @@ kubectl config --kubeconfig=config_alt use-context context-cluster2
 ### ~~17. Asignación de recursos y Autoescalado~~
 ### ~~18. Almacenamiento en Kubernetes~~
 ### ~~19. Storage Class -- almacenamiento dinámico~~
-### ~~20. Otros Worklokind: Podads -- más allá de los Deployments~~
+### ~~20. Otros Workloads -- más allá de los Deployments~~
 ### ~~21. Sondas -- PODS monitoring~~
 ### ~~22. RBAC -- Seguridad en clusters~~
 ### ~~23. Ingress -- conectar servicios al exterior~~

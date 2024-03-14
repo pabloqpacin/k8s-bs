@@ -37,7 +37,7 @@ VirtualBox > Tools > Network > NAT Networks > Create >
 ### `101_arch` master node
 
 VirtualBox > New >
-  - memoria: 2048MB
+  - memoria: 4096MB
   - cpu: 2
   - hard disk: 30GB
   - enable efi: yes
