@@ -48,10 +48,21 @@ end
 ```bash
 # Ejecutar script desde las máquinas del laboratorio
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/pabloqpacin/k8s-bs/main/scripts/INSTALL.sh)"
+
+# Una vez hay un nodo master, introducir esto en los workers
+sudo kubeadm join 192.168.10.101:6443 --token b2kh64.yttzy1f96n9jxatn \
+        --discovery-token-ca-cert-hash sha256:3f58b0c51a9a5ffa6585928864be8ebf371a99851b4f67c6c65d48b39b57fa6a
+
 ```
 
 <!-- ### Mantenimiento
 
 - [cheatsheets/utils] -->
 
+
+## Otros materiales
+
+- [docs/curso-parte1](/docs/curso-parte1.md)
+- [docs/curso-parte2](/docs/curso-parte2.md)
+- [gist: k8s-wordpress-mysql.yaml](https://gist.github.com/pabloqpacin/869a66beca9f3d7b68e28f992f4d55c5)
 

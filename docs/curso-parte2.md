@@ -22,7 +22,8 @@
     - [15. Crear un cluster real con Kubeadm con VMs (!)](#15-crear-un-cluster-real-con-kubeadm-con-vms-)
     - [16. Scheduler -- Asignar Pods a Nodos](#16-scheduler----asignar-pods-a-nodos)
     - [17. Asignación de recursos y Autoescalado](#17-asignación-de-recursos-y-autoescalado)
-    - [18. Almacenamiento en Kubernetes](#18-almacenamiento-en-kubernetes)
+    - [18. Almacenamiento en Kubernetes: volúmenes](#18-almacenamiento-en-kubernetes-volúmenes)
+      - [Ejemplo con NFS: aplicación Wordpress con MySQL](#ejemplo-con-nfs-aplicación-wordpress-con-mysql)
     - [19. Storage Class -- almacenamiento dinámico](#19-storage-class----almacenamiento-dinámico)
     - [20. Otros Workloads -- más allá de los Deployments](#20-otros-workloads----más-allá-de-los-deployments)
     - [21. Sondas -- PODS monitoring](#21-sondas----pods-monitoring)
@@ -957,9 +958,585 @@ watch kubectl get hpa
   # AUMENTA EL NÚMERO DE RÉPLICAS
 ```
 
-### 18. Almacenamiento en Kubernetes
+### 18. Almacenamiento en Kubernetes: volúmenes
+
+> - https://kubernetes.io/docs/concepts/storage/volumes/
+> - https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+
+- Intro
+  - Almacenamiento en kubernetes es efímero (`/tmp`) -- Concepto de 'inmutabilidad', tema 'Estado deseado', al eliminar se restauran recursos (memoria, cpu, almacenamiento)
+  - Volúmenes: persistencia; tipos: locales, externos, cloud (según *drivers*)
+  - *CSI*: Container Storage Interface:: 'estándar que permite exponer almacenamiento a todo tipo de workloads de kubernetes'
+- Cómo crear volúmenes
+  - Dos cláusulas:
+    - 1 para indicar dónde montar los volúmenes en el pod (`spec.containers.volumeMounts`)
+    - 1 para indicar qué volúmenes vamos a usar (`spec.volumes`)
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volumenes
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - mountPath: /home
+      name: home
+  volumes:
+  - name: home
+    hostPath:
+      path: /home/kubernetes/datos
+```
+
+- Crear volúmenes en un pod
+
+```bash
+sudo mkdir /home/kubernetes/datos
+
+mkdir -p ~/k8s/volumenes && cd $_
+nvim volumen.yaml
+```
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: volumenes
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+    - mountPath: /home
+      name: home
+    - mountPath: /git
+      name: git
+      readOnly: true
+    - mountPath: /temp
+      name: temp
+  volumes:
+  - name: home
+    hostPath:     # HOST, MÁQUINA REAL;; persistencia pero ojo nodos...
+      path: /home/kubernetes/datos
+  - name: git
+    # DEPRECATED -- https://kubernetes.io/docs/concepts/storage/volumes/#gitrepo
+    gitRepo:
+      repository: https://github.com/ApasoftTraining/cursoKubernetes.git
+  - name: temp
+    emptyDir: {}  # Directorio temporal
+
+```
+```bash
+kubectl apply -f volumenes
+kubectl describe pod volumenes
+kubectl exec -it volumenes -- bash
+  # touch foo
+# ssh <nodo> && cd /home/kubernetes/datos
+  # ls foo
+```
+
+- Volúmenes persistentes
+  - Storage Class { PV (~vdi) > PVClaim } > Pod <!-- almacenamiento dinámico -->
+  - Tipos de acceso:
+    - `ReadWriteOnce`: RWO solo para un nodo
+    - `ReadOnlyMany`: ROX muchos nodos
+    - `ReadWriteMany`: RWM muchos nodos
+    - `ReadWriteOncePod`: RWOP un solo Pod
+  - Tipos de aprovisionamiento:
+    - Estático: asociar PV de forma estático
+    - Dinámico: se usan Storage Classes para encontrar un PV adecuado
+  - Tipos de Reciclaje de PV (al eliminar el pod asociado):
+    - Retain: reclamación manual (no se elimina pero tampoco puede ser reusado sin más)
+    - Recycle: prepara para reutilizar (DEPRECATED)
+    - Delete: se elimina
+
+...
+
+- Crear un PV con HostPath (no recomendable en producción por N nodos, lo suyo sería almacenamiento compartido)
+
+```bash
+cd ~/k8s/volumenes
+nvim pv_claim_pod.yaml
+```
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-volume
+  labels:
+    type: local
+spec:
+  storageClassName: sistemaficheros     # ojo
+  capacity:
+    storage: 3Gi
+  accessModes:                          # 1+ ok
+    - ReadWriteOnce
+  hostPath:                             # DRIVER
+    path: "/mnt/data"                   # en el nodo!!
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pv-claim
+spec:
+  storageClassName: sistemaficheros
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi                      # se asocian los 3 del PV, desaprovechado por diseño
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pv-pod
+spec:
+  volumes:
+    - name: pv-storage
+      persistentVolumeClaim:
+        claimName: pv-claim
+  containers:
+    - name: task-pv-container
+      image: nginx
+      ports:
+        - containerPort: 80
+          name: "http-server"
+      volumeMounts:
+        - mountPath: "/usr/share/nginx/html"
+          name: pv-storage
+
+```
+```bash
+kubectl apply -f pv_claim_pod.yaml
+
+kubectl get pv
+kubectl get pvc
+kubectl get pods -o wide
+kubectl describe pv | grep -e 'Finalizers' -e 'Source'  -A5
+kubectl describe pvc
+kubectl describe pod pv-pod | grep -e 'Mount' -e 'Volumes' -A5
+# ssh <nodo> && ls /mnt/data
+```
+
+- Demonstración con NFS
+  - lo ideal sería tener otra máquina (externa al cluster) para el almacenamiento
+  - montar el entorno
+
+```bash
+# 201.cluster.net
+sudo apt-get update && sudo apt-get install -y \
+    nfs-kernel-server
+
+if [[ ! -d /var/datos && $(! grep -q '/var/datos' /etc/exports; echo $?) ]]; then
+    sudo mkdir -p /var/datos
+    sudo chmod o+rwx /var/datos
+    echo '/var/datos *(rw,sync,no_root_squash,no_all_squash)' | sudo tee -a /etc/exports
+    sudo systemctl restart nfs-kernel-server
+else
+    echo 'Existing NFS config detected. Not applying changes'
+fi
+```
+```bash
+# 101, 202-206
+distro=$(grep -s "^ID=" /etc/os-release | awk -F '=' '{print $2}')
+case $distro in
+    'ubuntu') sudo apt-get update && sudo apt-get install -y nfs-common ;;
+    'fedora') sudo dnf in -y nfs-utils ;;
+    'arch') sudo pacman -Sy --noconfirm nfs-utils ;;
+    *) : ;;
+esac
+
+if [[ ! -d /var/datos ]]; then
+    sudo mkdir /var/datos
+    sudo mount -t nfs ns.cluster.net:/var/datos /var/datos
+else
+    sudo mount -t nfs ns.cluster.net:/var/datos /var/datos
+fi
+```
+
+- Ejemplo con NFS: aplicación NGINX
+
+```bash
+# git clone --depth 1 https://github.com/pabloqpacin/ASIR /tmp/ASIR && \
+#     cp -r /tmp/ASIR/Redes/Entregas/web ~/web && \
+#     rm -rf /tmp/ASIR
+
+cp -r ~/web/* /var/datos
+
+mkdir -p ~/k8s/nfs && cd $_
+nvim pv-pvc-pod_nfs.yaml
+```
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: nfs-pv
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  storageClassName: volumen-nfs
+  nfs:
+    path: /var/datos
+    server: 192.168.10.201
+    # server: 201.cluster.net
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nfs-pvc
+spec:
+  storageClassName: volumen-nfs
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pod-nfs
+spec:
+  containers:
+  - name: nginx
+    image: nginx
+    volumeMounts:
+      - mountPath: /usr/share/nginx/html
+        name: nfs-vol
+  volumes:
+    - name: nfs-vol
+      persistentVolumeClaim:
+        claimName: nfs-pvc
+```
+```bash
+kubectl apply -f pv-pvc-pod_nfs.yaml
+
+kubectl get pv && kubectl get pvc && kubectl get pods
+kubectl describe pod pod-nfs
+
+kubectl proxy
+curl localhost:8001/api/v1/namespaces/default/pods/pod-nfs | jq -C
+curl localhost:8001/api/v1/namespaces/default/pods/pod-nfs/proxy/
+
+kubectl exec -it pod-nfs -- ls -l /usr/share/nginx/html
+```
+
+#### Ejemplo con NFS: aplicación Wordpress con MySQL
+
+<!-- servicios:
+- clusterip: solo en cluster
+- nodeport: fuera de cluster
+- loadbalancer: entorno cloud -->
+
+1. Tweak NFS
+
+```bash
+# En 201 (NFS server)
+
+sudo rmdir /var/datos
+sudo mkdir -p /var/datos/wordpress
+sudo mkdir -p /var/datos/mysql
+sudo chmod o+rwx /var/datos
+
+sudo sed -i '/\/var\/datos/d' /etc/exports
+{
+  echo '/var/datos/wordpress *(rw,sync,no_root_squash,no_all_squash)'
+  echo '/var/datos/mysql *(rw,sync,no_root_squash,no_all_squash)'
+} | sudo tee -a /etc/exports
+
+sudo systemctl restart nfs-kernel-server
+
+showmount -e
+```
+
+```bash
+# En 101, 202-206
+sudo umount -R /var/datos && sudo rmdir /var/datos
+sudo mkdir -p /var/datos/wordpress && sudo mount -t nfs ns.cluster.net:/var/datos/wordpress /var/datos/wordpress
+sudo mkdir -p /var/datos/mysql && sudo mount -t nfs ns.cluster.net:/var/datos/mysql /var/datos/mysql
+df -h
+```
+
+1. Kubernetes
+
+```bash
+cd ~/k8s/nfs
+nvim wordpress-mysql_pv-pvc-cm-svc-deploy.yaml
+```
+```yaml
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-wordpress
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  storageClassName: wordpress
+  nfs:
+    path: /var/datos/wordpress
+    server: ns.cluster.net                  # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!?
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-mysql
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Recycle
+  storageClassName: mysql
+  nfs:
+    path: /var/datos/mysql
+    server: ns.cluster.net
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-wordpress
+spec:
+  storageClassName: wordpress
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-mysql
+spec:
+  storageClassName: mysql
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datos-wordpress-env
+  namespace: default
+data:
+  WORDPRESS_DB_HOST: mysql
+  WORDPRESS_DB_PASSWORD: password
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: wordpress
+  labels:
+    app: wordpress
+spec:
+  ports:
+    - port: 80
+  selector:
+    app: wordpress
+    tier: frontend
+  type: NodePort
+  # type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+  labels:
+    app: wordpress
+spec:
+  selector:
+    matchLabels:
+      app: wordpress
+      tier: frontend
+  strategy:
+    type: Recreate      # VS RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: wordpress
+        tier: frontend
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:4.8-apache
+        # env: {- name: foo value: bar}
+        envFrom:
+        - configMapRef:
+            name: datos-wordpress-env
+        ports:
+        - containerPort: 80
+          name: wordpress
+        volumeMounts:
+        - name: wordpress-persistent-storage
+          mountPath: /var/www/html
+        # Ojo resources
+        resources:
+          requests:
+            memory: "200Mi"
+            cpu: "100m"
+          limits:
+            memory: "500Mi"
+            cpu: "200m"
+      volumes:
+      - name: wordpress-persistent-storage
+        persistentVolumeClaim:
+          claimName: pvc-wordpress
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: datos-mysql-env
+  namespace: default
+data:
+  MYSQL_ROOT_PASSWORD: password
+  # El resto durante la instalación...
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mysql
+  labels:
+    app: wordpress
+spec:
+  ports:
+    - port: 3306
+  selector:
+    app: wordpress
+    tier: mysql
+  clusterIP: None     # ...
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mysql
+  labels:
+    app: wordpress
+spec:
+  selector:
+    matchLabels:
+      app: wordpress
+      tier: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: wordpress
+        tier: mysql
+    spec:
+      containers:
+      - name: mysql
+        image: mysql:5.6
+        envFrom:
+        - configMapRef:
+            name: datos-mysql-env
+        ports:
+        - containerPort: 3306
+          name: mysql
+        volumeMounts:
+        - name: mysql-persistent-storage
+          mountPath: /var/lib/mysql
+        # Error OOMKilled si no se definen recursos
+        resources:
+          requests:
+            memory: "500Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "200m"
+      volumes:
+      - name: mysql-persistent-storage
+        persistentVolumeClaim:
+          claimName: pvc-mysql
+
+```
+```bash
+kubectl apply -f wordpress-mysql_pv-pvc-cm-svc-deploy.yaml
+kubectl get svc
+kubectl get pods
+
+xdg-open http://206.cluster.net:32195 || brave http://206.cluster.net:32195
+  # Titulo=MIWEBSITE Usuario=wordpress-admin Pass=0eVwjvvC7)%mtKajoJ
+
+sudo tree /var/datos
+```
+
+```txt
+[~] kubectl get nodes -o wide                                                                                                                              16:52:21
+NAME         STATUS   ROLES           AGE    VERSION   INTERNAL-IP      EXTERNAL-IP   OS-IMAGE                           KERNEL-VERSION          CONTAINER-RUNTIME
+101-arch     Ready    control-plane   5d6h   v1.29.2   192.168.10.101   <none>        Arch Linux                         6.7.9-arch1-1           containerd://1.7.13
+201-ubuntu   Ready    <none>          5d6h   v1.29.2   192.168.1.35     <none>        Ubuntu 22.04.4 LTS                 5.15.0-100-generic      containerd://1.6.28
+202-ubuntu   Ready    <none>          5d6h   v1.29.2   192.168.10.202   <none>        Ubuntu 22.04.4 LTS                 5.15.0-100-generic      containerd://1.6.28
+203-ubuntu   Ready    <none>          5d6h   v1.29.2   192.168.10.203   <none>        Ubuntu 22.04.4 LTS                 5.15.0-100-generic      containerd://1.6.28
+204-fedora   Ready    <none>          5d6h   v1.29.2   192.168.10.204   <none>        Fedora Linux 39 (Server Edition)   6.7.7-200.fc39.x86_64   containerd://1.6.28
+205-fedora   Ready    <none>          5d6h   v1.29.2   192.168.10.205   <none>        Fedora Linux 39 (Server Edition)   6.7.7-200.fc39.x86_64   containerd://1.6.28
+206-arch     Ready    <none>          5d6h   v1.29.2   192.168.10.206   <none>        Arch Linux                         6.7.9-arch1-1           containerd://1.7.13
+[~]                                                                                                                                                        16:52:23
+[~] kubectl get pods -o wide                                                                                                                               16:52:25
+NAME                         READY   STATUS    RESTARTS      AGE   IP             NODE         NOMINATED NODE   READINESS GATES
+mysql-5499b7d87f-2tltr       1/1     Running   0             17m   10.0.170.216   203-ubuntu   <none>           <none>
+wordpress-68685cf997-td2gs   1/1     Running   1 (16m ago)   17m   10.0.151.160   206-arch     <none>           <none>
+[~]                                                                                                                                                        16:52:28
+[~]                                                                                                                                                        16:52:29
+[~] kubectl get svc -o wide                                                                                                                                16:52:29
+NAME         TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)        AGE    SELECTOR
+kubernetes   ClusterIP   10.96.0.1       <none>        443/TCP        5d6h   <none>
+mysql        ClusterIP   None            <none>        3306/TCP       36m    app=wordpress,tier=mysql
+wordpress    NodePort    10.100.206.18   <none>        80:32195/TCP   36m    app=wordpress,tier=frontend
+[~]                                                                                                                                                         16:53:08
 
 
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+pabloqpacin@101-arch:~ » curl -v 192.168.10.206:32195
+*   Trying 192.168.10.206:32195...
+* Connected to 192.168.10.206 (192.168.10.206) port 32195
+> GET / HTTP/1.1
+> Host: 192.168.10.206:32195
+> User-Agent: curl/8.6.0
+> Accept: */*
+>
+< HTTP/1.1 302 Found
+< Date: Mon, 18 Mar 2024 15:53:04 GMT
+< Server: Apache/2.4.10 (Debian)
+< X-Powered-By: PHP/5.6.32
+< Expires: Wed, 11 Jan 1984 05:00:00 GMT
+< Cache-Control: no-cache, must-revalidate, max-age=0
+< Location: http://192.168.10.206:32195/wp-admin/install.php
+< Content-Length: 0
+< Content-Type: text/html; charset=UTF-8
+<
+* Connection #0 to host 192.168.10.206 left intact
+pabloqpacin@101-arch:~ »
+```
+
+- Escalar WordPress
+
+```bash
+kubectl describe svc wordpress | grep 'Endpoints'
+
+kubectl scale --replicas=4 deploy/wordpress
+kubectl describe svc wordpress | grep 'Endpoints'
+kubectl get deploy && kubectl get pods && kubectl get rs
+
+kubectl describe deploy wordpress | grep -A7 'Events'
+```
+> MySQL no se podría escalar/distribuir sin más (habría que configurar cluster de mysql)
 
 ---
 
