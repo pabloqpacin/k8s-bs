@@ -25,6 +25,7 @@
     - [18. Almacenamiento en Kubernetes: volúmenes](#18-almacenamiento-en-kubernetes-volúmenes)
       - [Ejemplo con NFS: aplicación Wordpress con MySQL](#ejemplo-con-nfs-aplicación-wordpress-con-mysql)
     - [19. Storage Class -- almacenamiento dinámico](#19-storage-class----almacenamiento-dinámico)
+      - [Laboratorio: AWS y discos ESB](#laboratorio-aws-y-discos-esb)
     - [20. Otros Workloads -- más allá de los Deployments](#20-otros-workloads----más-allá-de-los-deployments)
     - [21. Sondas -- PODS monitoring](#21-sondas----pods-monitoring)
     - [22. RBAC -- Seguridad en clusters](#22-rbac----seguridad-en-clusters)
@@ -36,6 +37,7 @@
 
 ## NOTAS
 
+- https://kubernetes.io/docs/reference/kubectl/quick-reference/
 
 ### Dashboard UI en Cluster
 
@@ -515,10 +517,10 @@ wget https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/
 nvim components.yaml
   # en Deployment, donde 'args', debajo de 'secure-port':
     # - --kubelet-insecure-tls
-#  # donde 'preferred-address-types': sed 's/InternalIP/InternalDNS,InternalIP,ExternalDNS/'
-#  # donde 'metric-resolution': sed 's/15s/30s/'
-#  # antes de 'priorityClassName':
-#  #   hostNetwork: true
+#  # # donde 'preferred-address-types': sed 's/InternalIP/InternalDNS,InternalIP,ExternalDNS/'
+#  # # donde 'metric-resolution': sed 's/15s/30s/'
+#  # # antes de 'priorityClassName':
+#  # #   hostNetwork: true
 
 kubectl apply -f components.yaml
 
@@ -1265,7 +1267,7 @@ sudo mkdir -p /var/datos/mysql && sudo mount -t nfs ns.cluster.net:/var/datos/my
 df -h
 ```
 
-1. Kubernetes
+2. Kubernetes
 
 ```bash
 cd ~/k8s/nfs
@@ -1533,10 +1535,716 @@ kubectl describe svc wordpress | grep 'Endpoints'
 kubectl scale --replicas=4 deploy/wordpress
 kubectl describe svc wordpress | grep 'Endpoints'
 kubectl get deploy && kubectl get pods && kubectl get rs
+kubectl scale --replicas=2 deploy/wordpress
 
 kubectl describe deploy wordpress | grep -A7 'Events'
 ```
 > MySQL no se podría escalar/distribuir sin más (habría que configurar cluster de mysql)
+
+### 19. Storage Class -- almacenamiento dinámico
+
+> - https://kubernetes.io/docs/concepts/storage/storage-classes/
+> - Se recomienda integrar con **NFS**, y ojo con los *provisioners*
+
+- Introducción
+  - Kubernetes elige el pv...
+  - ¡Importante provisioner (plugin) según plataforma!
+
+...
+
+- Crear sc, pv y pvc asociados
+
+```bash
+mkdir -p ~/k8s/sc && cd $_
+nvim bbdd_sc-pv-pvc-pod.yaml
+```
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  annotations:
+    description: Esto es un ejemplo de Storage Class
+  name: bbdd
+provisioner: kubernetes.io/no-provisioner
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer     # según proveedor
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-bbdd-vol1
+spec:
+  storageClassName: bbdd
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/tmp/bbdd-vol1"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-bbdd-vol2
+spec:
+  storageClassName: bbdd
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/tmp/bbdd-vol2"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-bbdd
+spec:
+  storageClassName: bbdd
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: postgres-db1
+spec:
+  containers:
+  - name: postgres-db1
+    image: postgres:16.2
+    ports:
+    - containerPort: 5432
+      protocol: TCP
+    volumeMounts:
+    - mountPath: /var/lib/postgresql/data
+      name: postgres-db-volume1
+    env:
+      - name: POSTGRES_PASSWORD
+        value: "secret"
+      - name: POSTGRES_USER
+        value: "odoo"
+      - name: POSTGRES_DB
+        value: "postgres"
+  volumes:
+  - name: postgres-db-volume1
+    persistentVolumeClaim:
+      claimName: pvc-bbdd
+ 
+```
+```bash
+kubectl apply -f bbdd_sc-pv-pvc-pod.yaml
+# kubectl get pv && kubectl get pvc && kubectl get sc
+# kubectl get pvc | grep 'Pending'      # if no pod assigned!!
+kubectl get pv | grep 'pvc-bbdd'        # SE SELECCIONA DINÁMICAMENTE SEGÚN TAMAÑO
+ssh 206.cluster.net && sudo ls -la /tmp/bbdd-vol2
+```
+
+- Laboratorio con SC dinámico
+
+```bash
+cd ~/k8s/sc
+nvim dinamico_sc-pv-pvc.yaml
+```
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: sc-discos-locales
+provisioner: kubernetes.io/no-provisioner
+volumeBindingMode: Immediate
+reclaimPolicy: Delete
+
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: volume1
+  labels:
+    type: local
+    curso: kubernetes
+spec:
+  storageClassName: sc-discos-locales
+  capacity:
+    storage: 4Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/datos"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: volume2
+  labels:
+    type: local
+    curso: kubernetes
+spec:
+  storageClassName: sc-discos-locales
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/datos"
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: volume3
+  labels:
+    type: local
+    curso: kubernetes
+spec:
+  storageClassName: sc-discos-locales
+  capacity:
+    storage: 6Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/datos"
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-dinamico
+spec:
+  storageClassName: sc-discos-locales
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+```
+```bash
+kubectl apply -f dinamico_sc-pv-pvc .yaml
+kubectl get pvc && kubectl get pv
+```
+
+- Generar PV automáticos
+
+```bash
+nvim automatico_sc-pvc.yaml
+```
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: sc-dinamica
+provisioner: k8s.io/minikube-hostpah    # OJO!!
+volumeBindingMode: Immediate
+reclaimPolicy: Delete
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pvc-dinamico
+spec:
+  storageClassName: sc-dinamica
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 3Gi
+```
+```bash
+kubectl apply -f automatico_sc-pvc.yaml
+kubectl get pvc && kubectl get pv
+kubectl describe pvc pvc-dinamico
+```
+
+#### Laboratorio: AWS y discos ESB
+
+> https://docs.aws.amazon.com/eks/latest/userguide/ebs-csi.html
+
+- Instalar Driver CSI
+- Crear volumen EBS, roles y políticas
+- Crear PV, PVC
+
+
+### 20. Otros Workloads -- más allá de los Deployments
+
+- Workloads
+  - Tipos
+    - **Deployments**: stateless, relación con pods/rs...
+    - **ReplicaSet**: asociados al Deployment
+    - **StatefulSet**: soporte para aplicaciones con estado, alta disponibilidad, etc (eg. BD)
+    - **DaemonSet**: útiles para entornos log o monitorización
+    - Job y CronJob: de forma planificada para hacer backups, logs etc
+    - **Custom Resource**: los anteriores, adaptados...
+
+...
+
+- **StatefulSets** (BD)
+  - Control para ejecutar pods que se encargan de aplicaciones con estado
+  - A los pods se les asigna una id concreta (no aleatoria como en los deploy) y secuencial
+  - No son intercambiables: al borrar uno, no se crea uno nuevo/sustituto sino el mismo (misma config, datos etc)
+  - Los pods no comparten datos: cada uno de ellos maneja su propio volumen persistente (pod > pvc > pv > nodo)
+  - Replicación no en kubernetes sino en el software (ej MySQL maestro + MySQL esclavos)
+  - Los PV se crean a partir de una StorageClass y un volumeClaim template, de forma exclusiva para cada pod
+  - (Servicio headless) Cada pod tiene su propio DNS dentro del servicio
+
+- Ejemplo con Mongo (almacenamiento dinámico con minikube...)
+
+...
+
+- DaemonSets
+  - "Tantos pods como nodos"
+
+> [logstash](https://www.elastic.co/es/logstash)
+
+```bash
+mkdir ~/k8s/otros && cd $_
+nvim daemonset-logstash.yaml
+```
+```yaml
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: log-daemonset
+spec:
+  selector:
+    matchLabels:
+      name: log
+  template:
+    metadata:
+      labels:
+        name: log
+    spec:
+      containers:
+      - name: log
+        image: logstash:8.12.2
+```
+```bash
+kubectl apply -f daemonset-logstash.yaml
+# Si creáramos un nuevo nodo, el DaemonSet crearía el pod correspondiente
+```
+
+- Jobs
+  - Procesos individuales para tareas concretas, efímeros
+  - CronJobs se pueden planificar
+
+```bash
+cd ~/k8s/otros
+nvim job.yaml
+```
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job1
+spec:
+  template:
+    spec:
+      containers:
+      - name: job1
+        image: alpine
+        command: ["sh","-c"]
+        args: ["echo Estás en la máquina $(uname -n)"]
+      restartPolicy: Never
+```
+```bash
+kubectl apply -f job.yaml
+kubectl logs <job-pod>
+kubectl describe job job1
+# Para actualizar el job, hay que eliminarlo
+```
+
+- Jobs con varias réplicas y otros parámetros...
+  - eg. actualizar BD...
+
+```bash
+cd ~/k8s/otros
+nvim job-varios.yaml
+```
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: job2
+spec:
+  activeDeadlineSeconds: 15
+  # completions: 3      # ojo
+  # parallelism: 3      # ojo
+  template:
+    spec:
+      containers:
+      - name: job2
+        image: alpine
+        command: ["sh","-c"]
+        args: ["echo Estás en la máquina $(uname -n)"]
+      restartPolicy: Never
+```
+```bash
+kubectl apply -f job-varios.yaml
+```
+
+- Cronjobs
+  - `min - h - dm - m - dw`
+
+```bash
+cd ~/k8s/otros
+nvim cronjob.yaml
+```
+```yaml
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: cron-job1
+spec:
+  schedule: "* * * * *"       # CADA MINUTO
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: job1
+            image: alpine
+            command: ["sh","-c"]
+            args: ["echo Me ejecuto en este momento -- $(date)"]
+          restartPolicy: Never
+```
+```bash
+kubectl apply -f cronjob.yaml
+```
+
+### 21. Sondas -- PODS monitoring
+
+- Introducción
+  - liveness VS readiness
+  - "Permiten realizar diagnósticos sobre los contenedores de kubernetes"
+  - 3 tipos según tipo de prueba: comando VS http get VS socket
+    - respuestas: success VS failure VS unknown
+  - 3 tipos de comportamiento:
+    - liveness: si el contenedor vive; si no, se elimina; ojo `RestartPolicy`
+    - readiness: si la app funciona dentro del contenedor; 
+    - startup: avisa de que el contenedor/app arranquen (útil antes de las otras dos)
+
+...
+
+- Sonda Liveness de tipo Command
+
+```bash
+mkdir ~/k8s/sondas && cd $_
+nvim sonda-liveness.yaml
+```
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    test: liveness
+  name: sonda-liveness
+spec:
+  containers:
+  - name: pod-liveness
+    image: ubuntu
+    args:
+    - /bin/sh
+    - -c
+    - mkdir /tmp/prueba; sleep 30; rm -rf /tmp/prueba; sleep 600
+    livenessProbe:
+      exec:
+        command:
+        - ls
+        - /tmp/prueba
+      initialDelaySeconds: 5
+      periodSeconds: 5
+```
+```bash
+kubectl apply -f sonda-liveness.yaml
+kubectl describe pod sonda-liveness
+```
+
+- Sonda Liveness de tipo HTTP
+
+> - OJO: [Custom Docker Image](https://hub.docker.com/repository/docker/pabloqpacin/sonda-web/general) (web + `sonda.html`)
+> - OJO: Si usáramos volúmenes persistentes cambiaría el cuento...
+
+```bash
+cd ~/k8s/sondas
+nvim sonda-http.yaml
+```
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-d
+spec:
+  selector:
+    matchLabels:
+      app: web
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: apache
+        image: pabloqpacin/sonda-web:v1
+        ports:
+        - containerPort: 80
+        livenessProbe:
+          httpGet:
+            path: /sonda.html
+            port: 80
+          initialDelaySeconds: 3
+          periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc
+  labels:
+     app: web
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    nodePort: 30002
+    protocol: TCP
+  selector:
+     app: web
+```
+```bash
+kubectl apply -f sonda-http.yaml
+
+# kubectl get deploy && kubectl get pods && kubectl get rs && kubectl get svc
+# curl localhost:30002
+
+kubectl describe pod <pod> | grep 'Liveness'
+kubectl exec -it <pod> -- bash
+  # ls -la htdocs
+  # rm htdocs/sonda.html
+
+kubectl describe pod <pod> | grep -C5 'probe failed'
+# RESTART HAPPENS
+```
+
+- Sonda Readiness de tipo Socket
+
+**...**
+
+
+### 22. RBAC -- Seguridad en clusters
+
+> - https://kubernetes.io/docs/tasks/administer-cluster/certificates/
+> - https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/
+
+<!-- - https://dev-k8sref-io.web.app/docs/authentication/certificatesigningrequest-v1/
+- https://cert-manager.io/docs/usage/kube-csr/ -->
+
+
+
+- RBCA
+  - No existe API específica para gestińo de usuarios (se hace de forma externa)
+  - Opciones: **certificados** VS tokens VS basic auth VS oauth2
+  - Flow: CLIENTES (usuarios, serviceaccounts) > RECURSOS (pods, secrets, nodes, pv, services, cm, ingress) > VERBOS-OPERACIONES (list, create, watch, get, delete, patch)
+  - Estructura: *Roles* (get, create, ...) para objetos (pods, etc) en *namespace*; ClusterRoles (accesos a nodos,etc); asignación mediante **RoleBinding** entre cliente y los roles
+  - Roles: acumulativos (si se dan, se tienen)
+
+...
+
+- Ver Roles a nivel de Namespace
+
+```bash
+kubectl create namespace ventas &&
+kubectl get ns | grep 'ventas'
+
+# kubectl config set-context --current --namespace=ventas
+
+kubectl get roles --all-namespaces
+kubectl describe role kube-proxy -n kube-system
+kubectl describe role system:controller:cloud-provider -n kube-system
+
+kubectl api-resources | grep 'role'
+```
+
+- Crear roles
+
+```bash
+mkdir ~/k8s/rbac && cd $_
+nvim crear-role.yaml
+```
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: ventas       # IMPORTANTE
+  name: operador
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get", "watch", "list"]
+```
+```bash
+kubectl apply -f crear-role.yaml
+
+kubectl get roles -n ventas
+kubectl describe role operador -n ventas
+```
+
+- Cluster roles
+
+```bash
+kubectl get clusterroles
+kubectl describe clusterrole system:node
+
+cd ~/k8s/rbac
+nvim crear-clusterrole.yaml
+
+```
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: desarrollo
+rules:
+- apiGroups: [""]
+  resources: ["secrets", "configmaps"]
+  verbs: ["get", "watch", "list"]
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["create", "watch", "list", "get", "edit"]
+
+```
+```bash
+kubectl apply -f crear-clusterrole.yaml
+
+kubectl get clusterroles | grep 'desarrollo'
+kubectl describe clusterrole desarrollo
+```
+
+- **Certificados** para el acceso de un usuario (P1)
+
+```bash
+mkdir ~/k8s-certs && cd $_
+
+openssl genrsa -out desa1.key 4096
+# ls desa1.key      # CLAVE PRIVADA
+
+nvim desa1.csr.conf
+# añadimos '[ req_ext ]'
+```
+```ini
+[ req ]
+default_bits = 2048
+prompt = no
+default_md = sha256
+req_extensions = req_ext
+distinguished_name = dn
+
+[ dn ]
+O = desarrollo
+CN = desa1
+
+[ req_ext ]
+
+[ v3_ext ]
+authorityKeyIdentifier=keyid,issuer:always
+basicConstraints=CA:FALSE
+keyUsage=keyEncipherment,dataEncipherment
+extendedKeyUsage=serverAuth,clientAuth
+```
+```bash
+openssl req -config desa1.csr.conf -new -key desa1.key -out desa1.csr
+for file in $(ls); do cat $file; done
+
+nvim solicitud.bash
+# cambiamos 'certificates.k8s.io/v1beta1' por 'certificates.k8s.io/v1'
+# añadimos 'spec.signerName: kubernetes.io/kube-apiserver-client' frente a error
+# eliminamos '- server auth'
+```
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: desa1-req-auth
+spec:
+  signerName: kubernetes.io/kube-apiserver-client
+  groups:
+  - system:authenticated
+  request: $(cat desa1.csr | base64 | tr -d '\n')
+  usages:
+  - digital signature
+  - key encipherment
+  - client auth
+EOF
+```
+```bash
+bash solicitud.bash
+
+kubectl get csr         # 'Pending'
+kubectl certificate approve desa1-req-auth
+kubectl get csr         # 'Approved,Issued'
+kubectl get csr -o yaml
+
+kubectl get csr desa1-req-auth -o jsonpath='{.status.certificate}' | base64 --decode > desa1.crt
+# cat desa1.crt
+```
+
+- **Certificados** para el acceso de un usuario (P2)
+
+> Se recomienda crear usuarios Linux
+
+```bash
+# kc config get-contexts
+
+mkdir ~/k8s-certs/.kube
+cp ~/.kube/config ~/k8s-certs/.kube/config
+
+# sudo bat /etc/kubernetes/admin.conf
+cd ~/k8s-certs && nvim .kube/config
+# la parte 'clusters' queda igual
+# en 'context' cambiamos el usuario, nombre, y actualizaremos 'current-context'
+sed -i 's/user: kubernetes-admin/user: desa1/' ~/k8s-certs/.kube/config
+sed -i 's/name: kubernetes-admin@kubernetes/name: desa1-context/' ~/k8s-certs/.kube/config
+sed -i 's/current-context: kubernetes-admin@kubernetes/current-context: desa1-context/' ~/k8s-certs/.kube/config
+sed -i 's/- name: kubernetes-admin/- name: desa1/' ~/k8s-certs/.kube/config
+# en 'users', cambiamos el nombre y para los certificados ponemos los path...
+sed -i "s#client-certificate-data:.*#client-certificate-data: $HOME/k8s-certs/desa1.crt#" ~/k8s-certs/.kube/config
+sed -i "s#client-key-data:.*#client-key-data: $HOME/k8s-certs/desa1.key#" ~/k8s-certs/.kube/config
+```
+```yaml
+apiVersion: v1
+clusters:
+- cluster:
+    certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURCVENDQWUyZ0F3SUJBZ0lJR0c2U3F5QnZHek13RFFZSktvWklodmNOQVFFTEJRQXdGVEVUTUJFR0ExVUUKQXhNS2EzVmlaWEp1WlhSbGN6QWVGdzB5TkRBek1UTXdPVEE0TlROYUZ3MHpOREF6TVRFd09URXpOVE5hTUJVeApFekFSQmdOVkJBTVRDbXQxWW1WeWJtVjBaWE13Z2dFaU1BMEdDU3FHU0liM0RRRUJBUVVBQTRJQkR3QXdnZ0VLCkFvSUJBUURYUXJaRHpnVXQ4RThtUFhEWisxcjNsRk5EQk5tUVVZbU5KdG1QNU1YU1Q2TUdYNzhIaDFGVUJSUlcKZDFOSWZqdW5FZVlkTVA2Y0NNb3NYclJBR0pMamN3OWxjQUZYd2JQOVZNdkZqbTFGN1VSRnlHS3dLakZtS3JUbQp6OEw2SnJwdVY0V0dBb25Vc1MxdDAxNGFVWFBsTDFDM1RRNWhzVGtjR2g1WVNCTEtMYS9EQlhUcnNXM2RjT0tQCk45VmRWeGt6K0ZicjdpNGlsaWJrRmVIcFQzL1BUZXF2NUlLQ29PZ1FPMXFxc0J4aGFZbFNHTlN0b3lEa2tubXMKSm5vcDhTUFJyVUJnOVNQLzM3WTRvZWsxTmlISHZpSXA4UXF0T0Z2b2gwS2VyWTFXck8wTit6UlB2OWFWU2lHTwphZUpLZi9DczlvR2hwZTJQSng2S05IUXpWUzFsQWdNQkFBR2pXVEJYTUE0R0ExVWREd0VCL3dRRUF3SUNwREFQCkJnTlZIUk1CQWY4RUJUQURBUUgvTUIwR0ExVWREZ1FXQkJTaHZjc1AwTDZsdlowYlZrWk51ZkdmVE1yTUJUQVYKQmdOVkhSRUVEakFNZ2dwcmRXSmxjbTVsZEdWek1BMEdDU3FHU0liM0RRRUJDd1VBQTRJQkFRQVdiajBtOEYyRwpNcENpQlJiR08rSVlVNWI3QlVtUXViN3VWS0tTaEU3S2xOcUp2a0RhQ2FZRHRVTXFFNVNpdTUwemdiWnFtZjdnCmxSS2ZBaWE3aXFJS25PKzhVU0RGSU1MYStSYjdXalRYYnpmMW5hZDc4Ry9wM2cxcTg0TVBCNVYxb3NZV0p2VHgKRFdkM0JrcWpMa2pHTStBZ3ZwMWZGeHE1Z1RDdnVvZFEvemZNT21RSTlDakJ1a1gwTW5NeWthNTJ4ZVNBRVErdwoyNmp0TWpJMXJSdXhXSmw4T3hER3RQQUpYZ01EbWMrQzV5aythREhBWUZQZnJPSmNuRnN0K29zNHNLTnZQeGtYClJoTk5vaW5MSFg3Z2VZMTZUS2RCM21xajk3anhocEswZi92YlVXQWpOSEFBbkVaQ1dPSzdmaSsxdVdid1RwaDAKczE3WlRpNjhwdFFhCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K
+    server: https://192.168.10.101:6443
+  name: kubernetes
+contexts:
+- context:
+    cluster: kubernetes
+    # namespace: ventas
+    user: desa1
+  name: desa1-context
+current-context: desa1-context
+kind: Config
+preferences: {}
+users:
+- name: desa1
+  user:
+    client-certificate-data: /home/pabloqpacin/k8s-certs/desa1.crt
+    client-key-data: /home/pabloqpacin/k8s-certs/desa1.key
+```
+```bash
+kubectl --kubeconfig=$HOME/k8s-certs/.kube/config get pods
+```
+
+- problemas...
+    - https://github.com/openssl/openssl/issues/3536
+    - https://superuser.com/questions/512673/openssl-how-to-create-a-certificate-with-an-empty-subject-dn/944378#944378
+    - https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/#create-certificatessigningrequest
+
 
 ---
 
@@ -1549,10 +2257,6 @@ kubectl describe deploy wordpress | grep -A7 'Events'
 
 ---
 
-### 19. Storage Class -- almacenamiento dinámico
-### 20. Otros Workloads -- más allá de los Deployments
-### 21. Sondas -- PODS monitoring
-### 22. RBAC -- Seguridad en clusters
 ### 23. Ingress -- conectar servicios al exterior
 ### 24. Amazon EKS. Amazon Elastic Kubernetes
 ### 25. Azure AKS. Azure Kubernetes Services

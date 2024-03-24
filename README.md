@@ -23,7 +23,7 @@ end
 master --- workers
 
 subgraph workers[worker nodes]
-201_ubuntu[201_ubuntu<br>DHCP/DNS]
+201_ubuntu[201_ubuntu<br>DHCP/DNS<br>NFS]
 202_ubuntu
 203_ubuntu
 204_fedora

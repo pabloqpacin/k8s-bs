@@ -1,8 +1,5 @@
 # Kubernetes al completo ([udemy](https://www.udemy.com/course/kubernetes-al-completo/))
 
-<details>
-<summary>Table of Contents</summary>
-
 
 - [Kubernetes al completo (udemy)](#kubernetes-al-completo-udemy)
   - [PARTE 1](#parte-1)
@@ -38,8 +35,6 @@
     - [~~26. Próximas secciones~~](#26-próximas-secciones)
     - [~~27. Cierre y despedida~~](#27-cierre-y-despedida)
 
-
-</details>
 
 <!-- Destacan las secciones: 10, 12, 15, -->
 
