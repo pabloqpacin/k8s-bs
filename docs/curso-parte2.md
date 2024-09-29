@@ -2258,6 +2258,421 @@ kubectl --kubeconfig=$HOME/k8s-certs/.kube/config get pods
 ---
 
 ### 23. Ingress -- conectar servicios al exterior
+
+- Documentación
+  - https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/
+  - https://kubernetes.github.io/ingress-nginx/deploy/
+
+> **New Lab**: @setenova's POC_CICD_W1 on PaaS's K8s
+
+- Acceso al cluster (FCOS) desde mi workstation
+
+```bash
+tsh login --proxy=foo.setenova.es:443 --user=pquevedo
+tsh kube login poc-k8s-argocd
+tsh proxy kube -p 8443
+export KUBECONFIG=/home/pabloqpacin/.tsh/keys/foo.setenova.es/pquevedo-kube/foo.setenova.es/localproxy-8443-kubeconfig
+```
+
+- Instalar
+
+```bash
+# kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.11.2/deploy/static/provider/baremetal/deploy.yaml
+
+helm upgrade --install ingress-nginx ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace ingress-nginx --create-namespace
+```
+
+<details>
+
+> READ THIS SHI
+
+```log
+The ingress-nginx controller has been installed.
+It may take a few minutes for the load balancer IP to be available.
+You can watch the status by running 'kubectl get service --namespace ingress-nginx ingress-nginx-controller --output wide --watch'
+
+An example Ingress that makes use of the controller:
+  apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    name: example
+    namespace: foo
+  spec:
+    ingressClassName: nginx
+    rules:
+      - host: www.example.com
+        http:
+          paths:
+            - pathType: Prefix
+              backend:
+                service:
+                  name: exampleService
+                  port:
+                    number: 80
+              path: /
+    # This section is only required if TLS is to be enabled for the Ingress
+    tls:
+      - hosts:
+        - www.example.com
+        secretName: example-tls
+
+If TLS is enabled for the Ingress, a Secret containing the certificate and key must also be provided:
+
+  apiVersion: v1
+  kind: Secret
+  metadata:
+    name: example-tls
+    namespace: foo
+  data:
+    tls.crt: <base64 encoded cert>
+    tls.key: <base64 encoded key>
+  type: kubernetes.io/tls
+```
+
+</details>
+
+```log
+pabloqpacin@Pop76:~ » kubectl -n ingress-nginx get all
+
+NAME                                            READY   STATUS    RESTARTS   AGE
+pod/ingress-nginx-controller-74d59b4b45-dn895   1/1     Running   0          99s
+
+NAME                                         TYPE           CLUSTER-IP       EXTERNAL-IP   PORT(S)                      AGE
+service/ingress-nginx-controller             LoadBalancer   10.254.111.136   <pending>     80:31998/TCP,443:32353/TCP   99s
+service/ingress-nginx-controller-admission   ClusterIP      10.254.105.59    <none>        443/TCP                      99s
+
+NAME                                       READY   UP-TO-DATE   AVAILABLE   AGE
+deployment.apps/ingress-nginx-controller   1/1     1            1           99s
+
+NAME                                                  DESIRED   CURRENT   READY   AGE
+replicaset.apps/ingress-nginx-controller-74d59b4b45   1         1         1       100s
+```
+
+- Ejemplos de objeto Ingress (ojo `spec: defaultBackend`, ojo tema PATHs...)
+
+```yaml
+---
+# ingress-example-1.yaml
+apiVersion: networking.k8s.io/v
+kind: Ingress
+metadata:
+  name: ingress-apache
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx-example
+  rules:
+  - http:
+    paths:
+    - path: /testpath
+    pathType: Prefix
+    backend:
+      service:
+        name: tset
+        port:
+          number: 80
+
+---
+# ingress-example-2.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-wildcard-host
+spec:
+  rules:
+  - host: "foo.bar.com"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/bar"
+        backend:
+          service:
+            name: service1
+            port:
+              number: 80
+  - host: "*.foo.com"
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/foo"
+        backend:
+          service:
+            name: service2
+            port:
+              number: 80
+
+---
+# 1-host-n-servicios.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: simple-fanout-example
+spec:
+  rules:
+  - host: foo.bar.com
+    http:
+      paths:
+      - path: /foo
+        pathType: Prefix
+        backend:
+          service:
+            name: service1
+            port:
+              number: 4200
+      - path: /bar
+        pathType: Prefix
+        backend:
+          service:
+            name: service2
+            port:
+              number: 8080
+
+---
+# n-hosts.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: name-virtual-host-ingress
+spec:
+  rules:
+  - host: foo.bar.com
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: service1
+            port:
+              number: 80
+  - host: bar.foo.com
+    http:
+      paths:
+      - pathType: Prefix
+        path: "/"
+        backend:
+          service:
+            name: service2
+            port:
+              number: 80
+```
+
+- Crear app (deploy + svc)
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-d
+spec:
+  selector:
+    matchLabels:
+      app: web
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: apache
+        image: pabloqpacin/sonda-web:v1
+        ports:
+        - containerPort: 80
+        # livenessProbe:
+        #   httpGet:
+        #     path: /sonda.html
+        #     port: 80
+        #   initialDelaySeconds: 3
+        #   periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc-a
+  labels:
+     app: web
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    nodePort: 30002
+    protocol: TCP
+  selector:
+     app: web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc-b
+  labels:
+     app: web
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    nodePort: 30003
+    protocol: TCP
+  selector:
+     app: web
+```
+```yaml
+# ingress2.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-apache
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx   # OJO
+  rules:
+    # DNS apunta al cluster (ie. DNS > HAProxy > K8s host > Ingress)
+  - host: argocd.setenova.es
+    http:
+      paths:
+      - path: /apache
+        pathType: Exact
+        backend:
+          service:
+            name: web-svc
+            port:
+              number: 80
+      # - path: /nginx
+      #   pathType: Exact
+      #   backend:
+      #     service:
+      #       name: foo
+      #       port:
+      #         number: 80
+
+```
+```bash
+nvim deploy_svc.yaml
+  # ...
+
+kubectl apply -f deploy_svc.yaml
+
+{
+  NODE_IP=$(kubectl --namespace default get nodes -o jsonpath="{.items[0].status.addresses[0].address}")
+  curl ${NODE_IP}:30002
+    # BUENARDAS
+}
+
+# ---
+
+kubectl get ingressclasses
+
+nvim ingress2.yaml
+  # ...
+
+kubectl apply -f deploy_svc.yaml
+
+# ---
+
+# config. HAProxy
+    # server k8s-ingress-nginx 172.26.10.20:80/apache check
+```
+
+- Varios hosts!!
+
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-d
+spec:
+  selector:
+    matchLabels:
+      app: web
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: apache
+        image: pabloqpacin/sonda-web:v1
+        ports:
+        - containerPort: 80
+        # livenessProbe:
+        #   httpGet:
+        #     path: /sonda.html
+        #     port: 80
+        #   initialDelaySeconds: 3
+        #   periodSeconds: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc-a
+  labels:
+     app: web
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    nodePort: 30002
+    protocol: TCP
+  selector:
+     app: web
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-svc-b
+  labels:
+     app: web
+spec:
+  type: NodePort
+  ports:
+  - port: 80
+    nodePort: 30003
+    protocol: TCP
+  selector:
+     app: web
+```
+```yaml
+# ingress2.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ingress-multihost
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx   # OJO
+  rules:
+    # DNS apunta al cluster (ie. DNS > HAProxy > K8s host > Ingress)
+  - host: argocd.setenova.es
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-svc-a
+            port:
+              number: 80
+  - host: harbor.setenova.es
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: web-svc-b
+            port:
+              number: 80
+```
+
+> ËXITOS
+
+
 ### 24. Amazon EKS. Amazon Elastic Kubernetes
 ### 25. Azure AKS. Azure Kubernetes Services
 ### 26. Próximas secciones
